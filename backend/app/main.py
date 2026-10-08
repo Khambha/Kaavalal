@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.core.database import Base, engine
 from app.models import Location
 from app.routers.locations import router as locations_router
+from app.routers.analytics import router as analytics_router
 
 
 Base.metadata.create_all(bind=engine)
@@ -16,6 +17,7 @@ app = FastAPI(
 
 
 app.include_router(locations_router)
+app.include_router(analytics_router)
 
 
 @app.get("/")
