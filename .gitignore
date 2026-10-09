@@ -1,10 +1,29 @@
-# Python virtual environment
-backend/venv/
+# Python virtual environments
 
-# Environment variables
-.env
-backend/.env
+backend/venv/
+venv/
+.venv/
 
 # Python cache
-__pycache__/
-*.pyc
+
+**pycache**/
+*.py[cod]
+
+# Environment variables and secrets
+
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+
+# React / Node
+
+node_modules/
+dist/
+
+# Editor and operating system
+
+.vscode/
+.DS_Store
+Thumbs.db
