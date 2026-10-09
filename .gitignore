@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Local environment secrets
+.env
+.env.*
+!.env.example
+
+# React / Node
+node_modules/
+dist/
+
+# Editor and operating system
+.vscode/
+.DS_Store
+Thumbs.db
