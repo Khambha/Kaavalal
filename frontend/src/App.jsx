@@ -47,7 +47,7 @@ const [refreshKey, setRefreshKey] = useState(0);
 useEffect(() => {
 let cancelled = false;
 
-```
+
 async function loadDashboard() {
   setLoading(true);
   setError("");
@@ -81,7 +81,7 @@ loadDashboard();
 return () => {
   cancelled = true;
 };
-```
+
 
 }, [selectedDistrict, refreshKey]);
 
@@ -97,7 +97,7 @@ const risk = dashboard?.risk;
 
 return ( <div className="app"> <header className="navbar"> <div className="brand"> <h1>KAAVALAL</h1> <span>Kerala Disaster Management & Resource Allocation</span> </div>
 
-```
+
     <div className="system-status">
       <span className="status-dot" />
       {loading
@@ -351,7 +351,7 @@ return ( <div className="app"> <header className="navbar"> <div className="brand
     <span>{apiOnline ? "Connected to FastAPI" : "Waiting for API connection"}</span>
   </footer>
 </div>
-```
+
 
 );
 }
