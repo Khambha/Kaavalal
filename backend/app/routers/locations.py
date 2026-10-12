@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -53,3 +54,40 @@ def get_district(
         )
 
     return district
+
+
+@router.get(
+    "/{district_id}/taluks",
+    response_model=list[LocationResponse],
+)
+def get_district_taluks(
+    district_id: int,
+    db: Session = Depends(get_db),
+):
+    district = (
+        db.query(Location)
+        .filter(
+            Location.id == district_id,
+            Location.location_type == "DISTRICT",
+        )
+        .first()
+    )
+
+    if district is None:
+        raise HTTPException(
+            status_code=404,
+            detail="District not found",
+        )
+
+    taluks = (
+        db.query(Location)
+        .filter(
+            Location.parent_id == district_id,
+            Location.location_type == "TALUK",
+        )
+        .order_by(Location.name)
+        .all()
+    )
+
+    return taluks
+
