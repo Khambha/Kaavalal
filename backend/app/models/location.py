@@ -1,3 +1,4 @@
+
 from sqlalchemy import Column, Float, Integer, String
 
 from app.core.database import Base
@@ -18,6 +19,14 @@ class Location(Base):
 
     parent_id = Column(
         Integer,
+        nullable=True,
+        index=True,
+    )
+
+    # Legislative Assembly Constituency code, e.g. "001"
+    # Stored as a string so leading zeros are preserved.
+    administrative_code = Column(
+        String(10),
         nullable=True,
         index=True,
     )

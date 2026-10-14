@@ -7,8 +7,12 @@ class LocationResponse(BaseModel):
     name: str
     location_type: str
     parent_id: int | None = None
+
+    administrative_code: str | None = None
+
     latitude: float | None = None
     longitude: float | None = None
+
     area_sq_km: float | None = None
     population: int | None = None
     population_density: float | None = None

@@ -1,0 +1,20 @@
+
+{
+  "provider": "IMD",
+  "environment": "MOCK",
+  "is_mock_data": true,
+  "data": [
+    {
+      "station_id": "MOCK_VARKALA_001",
+      "station_name": "VARKALA",
+      "location_id": 203,
+      "observation_date": "2026-10-13",
+      "observation_time": "05:30:00",
+      "temperature": 29.0,
+      "humidity": 82.0,
+      "wind_speed": 18.0,
+      "wind_direction": 90.0,
+      "rainfall_24h": 85.0
+    }
+  ]
+}
