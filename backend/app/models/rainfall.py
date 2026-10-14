@@ -1,7 +1,15 @@
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+)
+
 from app.core.database import Base
 
 
@@ -20,6 +28,12 @@ class RainfallData(Base):
     rainfall_24h = Column(Float, nullable=True)
     rainfall_72h = Column(Float, nullable=True)
     rainfall_7d = Column(Float, nullable=True)
+
+    source = Column(
+        String(30),
+        nullable=False,
+        default="MOCK",
+    )
 
     recorded_at = Column(
         DateTime,
