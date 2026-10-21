@@ -43,15 +43,16 @@
   padding: 0;
 }
 
-html, body {
-  height: 100%;
-  width: 100%;
-  overflow: hidden; /* STRICT ONE-LEVEL ENFORCEMENT - ZERO WINDOW SCROLLBAR */
-  font-family: var(--font-sans);
-  background: var(--bg-app);
-  color: var(--text-main);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+html,
+body,
+#root {
+  min-height: 100%;
+  height: auto;
+}
+
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 #root {
@@ -1092,4 +1093,67 @@ button {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+
+/* ==================================================
+   SEEK HELP PAGE SCROLL FIX
+   Keep the dashboard fixed, but allow the Help page
+   to scroll when its content exceeds the viewport.
+   ================================================== */
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+#root {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* Normal dashboard remains viewport-locked */
+.app {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+/* Allow scrolling only on the Seek Help view */
+.app.app-help-view {
+  width: 100%;
+  min-height: 100vh;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.app.app-help-view .navbar {
+  flex: 0 0 48px;
+}
+
+.app.app-help-view .help-main {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+  padding: 24px 24px 48px;
+}
+
+.app.app-help-view .footer {
+  flex: 0 0 26px;
+}
+
+@media (max-width: 680px) {
+  .app.app-help-view .help-main {
+    padding: 16px 12px 36px;
+  }
 }
