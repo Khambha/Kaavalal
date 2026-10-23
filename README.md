@@ -138,3 +138,22 @@ The API should be available at:
 
 
 
+
+## Password reset email (optional)
+
+Citizen and rescuer accounts use the same password reset flow. To enable email delivery, set these values in `backend/.env` and restart the backend:
+
+```dotenv
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-sender@gmail.com
+SMTP_PASSWORD=your-Google-app-password
+SMTP_FROM_EMAIL=your-sender@gmail.com
+SMTP_USE_TLS=true
+SMTP_TIMEOUT_SECONDS=10
+FRONTEND_BASE_URL=http://127.0.0.1:5173
+```
+
+For Gmail, create an app password for the sender account after enabling 2-Step Verification. Store it only in the ignored local `backend/.env`; do not put it in source control or chat. If SMTP is not configured, password reset requests tell everyone to contact the system administrator.
+
+When SMTP is active, the request page always gives the same generic acknowledgment. An unknown email address receives no email and gets no reset token or usable reset form, so the endpoint does not reveal whether an account exists. Real accounts receive a single-use reset link that expires after 30 minutes.
