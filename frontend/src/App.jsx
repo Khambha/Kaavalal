@@ -424,6 +424,7 @@ function App() {
 
   const [dashboard, setDashboard] = useState(null);
   const [liveWeather, setLiveWeather] = useState(null);
+  const [weatherError, setWeatherError] = useState("");
 
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
@@ -433,6 +434,7 @@ function App() {
   const [activeView, setActiveView] = useState("dashboard");
 
   const [lacs, setLacs] = useState([]);
+  const selectedLocation = selectedLac || selectedDistrict;
 
   // --------------------------------------------------
   // Load district directory
@@ -468,13 +470,13 @@ function App() {
   }, []);
 
   // --------------------------------------------------
-  // Load dashboard information for selected district
+  // Load dashboard information for the selected district or LAC.
   // --------------------------------------------------
   useEffect(() => {
     if (
-      !selectedDistrict ||
-      selectedDistrict === "ALL" ||
-      !selectedDistrict.id
+      !selectedLocation ||
+      selectedLocation === "ALL" ||
+      !selectedLocation.id
     ) {
       setDashboard(null);
       return;
@@ -483,11 +485,12 @@ function App() {
     let cancelled = false;
 
     async function loadDashboard() {
+      setDashboard(null);
       setLoading(true);
 
       try {
         const response = await axios.get(
-          `${API_URL}/api/dashboard/${selectedDistrict.id}`
+          `${API_URL}/api/dashboard/${selectedLocation.id}`
         );
 
         if (!cancelled) {
@@ -510,36 +513,43 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedDistrict, refreshKey]);
+  }, [selectedLocation, refreshKey]);
 
   // --------------------------------------------------
   // Load live weather from OpenWeather through FastAPI
   // --------------------------------------------------
   useEffect(() => {
     if (
-      !selectedDistrict ||
-      selectedDistrict === "ALL" ||
-      !selectedDistrict.id
+      !selectedLocation ||
+      selectedLocation === "ALL" ||
+      !selectedLocation.id
     ) {
       setLiveWeather(null);
+      setWeatherError("");
       return;
     }
 
     let cancelled = false;
 
     async function fetchLiveWeather() {
+      setLiveWeather(null);
+      setWeatherError("");
       try {
         const response = await axios.get(
-          `${API_URL}/api/weather/${selectedDistrict.id}`
+          `${API_URL}/api/weather/${selectedLocation.id}`
         );
 
         if (!cancelled && response.data) {
           setLiveWeather(response.data);
+          setWeatherError("");
           setApiOnline(true);
         }
       } catch (error) {
         if (!cancelled) {
           setLiveWeather(null);
+          setWeatherError(
+            error.response?.data?.detail || "Live weather is unavailable."
+          );
 
           console.error(
             "Failed to load live weather:",
@@ -554,7 +564,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedDistrict, refreshKey]);
+  }, [selectedLocation, refreshKey]);
 
   // --------------------------------------------------
   // Load Assembly Constituencies (LACs)
@@ -667,15 +677,17 @@ function App() {
   const defaultInfo =
     DISTRICT_DEFAULTS[districtKey] || DISTRICT_DEFAULTS.palakkad;
 
-  const location = dashboard?.location || {
-    name: selectedDistrict?.name || defaultInfo.name,
-    location_type: "DISTRICT",
-    coastal_status: defaultInfo.coastal_status,
-    population: defaultInfo.population,
-    population_density: defaultInfo.population_density,
-    elevation_m: defaultInfo.elevation_m,
-    area_sq_km: defaultInfo.area_sq_km,
-  };
+  const location = dashboard?.location || (selectedLac
+    ? { ...selectedLac, location_type: "LAC" }
+    : {
+        name: selectedDistrict?.name || defaultInfo.name,
+        location_type: "DISTRICT",
+        coastal_status: defaultInfo.coastal_status,
+        population: defaultInfo.population,
+        population_density: defaultInfo.population_density,
+        elevation_m: defaultInfo.elevation_m,
+        area_sq_km: defaultInfo.area_sq_km,
+      });
 
   // Prefer live weather over any dashboard weather values.
   const weather = liveWeather || dashboard?.weather;
@@ -687,8 +699,8 @@ function App() {
       }
     : dashboard?.rainfall;
 
-  const hazards = dashboard?.hazards || defaultInfo.hazard_levels;
-  const risk = dashboard?.risk || defaultInfo.risk;
+  const hazards = dashboard?.hazards || (selectedLac ? null : defaultInfo.hazard_levels);
+  const risk = dashboard?.risk || (selectedLac ? null : defaultInfo.risk);
 
   // --------------------------------------------------
   // Render dashboard
@@ -1111,6 +1123,31 @@ function App() {
               )}
             </div>
 
+            {weatherError && (
+              <p className="data-note" role="status">{weatherError}</p>
+            )}
+
+            {liveWeather?.weather_condition && (
+              <p className="weather-condition">
+                {liveWeather.weather_icon && (
+                  <img
+                    src={`https://openweathermap.org/img/wn/${liveWeather.weather_icon}@2x.png`}
+                    alt=""
+                    width="40"
+                    height="40"
+                  />
+                )}
+                <span>{liveWeather.weather_condition}</span>
+              </p>
+            )}
+            {liveWeather?.recorded_at && (
+              <p className="data-note">
+                OpenWeather observation: {new Date(
+                  liveWeather.recorded_at * 1000
+                ).toLocaleString()}
+              </p>
+            )}
+
             <div className="weather-grid">
               {/* Temperature */}
               <div className="weather-item">
@@ -1133,6 +1170,42 @@ function App() {
 
                 <strong>
                   {formatValue(weather?.humidity, " %")}
+                </strong>
+              </div>
+
+              <div className="weather-item">
+                <div className="weather-item-head">
+                  <span>Feels Like</span>
+                  <span className="weather-icon">🌡️</span>
+                </div>
+                <strong>{formatValue(liveWeather?.feels_like, " °C")}</strong>
+              </div>
+
+              <div className="weather-item">
+                <div className="weather-item-head">
+                  <span>Pressure</span>
+                  <span className="weather-icon">🧭</span>
+                </div>
+                <strong>{formatValue(liveWeather?.pressure, " hPa")}</strong>
+              </div>
+
+              <div className="weather-item">
+                <div className="weather-item-head">
+                  <span>Cloud Cover</span>
+                  <span className="weather-icon">☁️</span>
+                </div>
+                <strong>{formatValue(liveWeather?.cloudiness, " %")}</strong>
+              </div>
+
+              <div className="weather-item">
+                <div className="weather-item-head">
+                  <span>Visibility</span>
+                  <span className="weather-icon">👁️</span>
+                </div>
+                <strong>
+                  {liveWeather?.visibility != null
+                    ? `${(liveWeather.visibility / 1000).toFixed(1)} km`
+                    : "--"}
                 </strong>
               </div>
 
@@ -1185,26 +1258,29 @@ function App() {
               {[
                 {
                   label: "Flood Risk",
-                  value: risk?.flood_risk ?? 45,
+                  value: risk?.flood_risk,
                 },
                 {
                   label: "Landslide Risk",
-                  value: risk?.landslide_risk ?? 25,
+                  value: risk?.landslide_risk,
                 },
                 {
                   label: "Drought Risk",
-                  value: risk?.drought_risk ?? 30,
+                  value: risk?.drought_risk,
                 },
                 {
                   label: "Overall Hazard Score",
-                  value: risk?.overall_risk ?? 35,
+                  value: risk?.overall_risk,
                 },
               ].map((item) => {
                 const score = item.value;
+                const hasScore = score != null;
                 const cls = riskClass(score);
 
                 const badgeLabel =
-                  score >= 75
+                  !hasScore
+                    ? "NO DATA"
+                    : score >= 75
                     ? "HIGH"
                     : score >= 40
                       ? "MODERATE"
@@ -1223,7 +1299,7 @@ function App() {
                         </span>
 
                         <strong className={`risk-num ${cls}`}>
-                          {score}%
+                          {hasScore ? `${score}%` : "--"}
                         </strong>
                       </div>
                     </div>
@@ -1232,16 +1308,37 @@ function App() {
                       <div
                         className={`risk-bar-fill ${cls}`}
                         style={{
-                          width: `${Math.min(
+                          width: hasScore ? `${Math.min(
                             Math.max(Number(score) || 0, 0),
                             100
-                          )}%`,
+                          )}%` : "0%",
                         }}
                       />
                     </div>
                   </div>
                 );
               })}
+            </div>
+          </section>
+
+          <section className="panel-section">
+            <div className="section-title">
+              <h3>Hazard Indicators</h3>
+              <span className="section-subtitle">Location data</span>
+            </div>
+            <div className="exposure-grid">
+              {[
+                ["Flood", hazards?.flood_level],
+                ["Landslide", hazards?.landslide_level],
+                ["Drought", hazards?.drought_level],
+                ["Earthquake", hazards?.earthquake_level],
+                ["Coastal", hazards?.coastal_level],
+              ].map(([label, value]) => (
+                <div className="exposure-item" key={label}>
+                  <span>{label}</span>
+                  <strong>{value || "No data"}</strong>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -1304,8 +1401,10 @@ function App() {
             </button>
 
             <p className="data-note">
-              Weather observations are retrieved from OpenWeather
-              through the FastAPI backend.
+              Live weather is retrieved from OpenWeather for the selected
+              {selectedLac ? " LAC's coordinates" : " district's coordinates"}.
+              Risk, hazard, and exposure data come from the selected location
+              record where available.
             </p>
           </div>
         </aside>

@@ -157,3 +157,7 @@ FRONTEND_BASE_URL=http://127.0.0.1:5173
 For Gmail, create an app password for the sender account after enabling 2-Step Verification. Store it only in the ignored local `backend/.env`; do not put it in source control or chat. If SMTP is not configured, password reset requests tell everyone to contact the system administrator.
 
 When SMTP is active, the request page always gives the same generic acknowledgment. An unknown email address receives no email and gets no reset token or usable reset form, so the endpoint does not reveal whether an account exists. Real accounts receive a single-use reset link that expires after 30 minutes.
+
+## Live dashboard weather
+
+The dashboard requests current conditions from OpenWeather for the selected district or LAC coordinates. Add `OPENWEATHER_API_KEY` to the ignored `backend/.env` file and restart the API. The key stays on the backend; the frontend does not call OpenWeather directly. When a LAC is selected, dashboard risk, hazard, and exposure values are loaded for that LAC record when available. Missing LAC-specific values are shown as unavailable instead of being filled from district defaults.
