@@ -99,17 +99,28 @@ def get_weather(
         if weather_items
         else None
     )
+    weather_icon = weather_items[0].get("icon") if weather_items else None
 
     rainfall = data.get("rain", {}).get("1h")
 
     return {
         "location_id": location.id,
         "location_name": location.name,
+        "latitude": data.get("coord", {}).get("lat", location.latitude),
+        "longitude": data.get("coord", {}).get("lon", location.longitude),
         "temperature": data.get("main", {}).get("temp"),
+        "feels_like": data.get("main", {}).get("feels_like"),
         "humidity": data.get("main", {}).get("humidity"),
+        "pressure": data.get("main", {}).get("pressure"),
         "wind_speed": data.get("wind", {}).get("speed"),
+        "wind_direction": data.get("wind", {}).get("deg"),
+        "cloudiness": data.get("clouds", {}).get("all"),
+        "visibility": data.get("visibility"),
         "weather_condition": weather_condition,
+        "weather_icon": weather_icon,
         "rainfall_1h": rainfall,
+        "sunrise": data.get("sys", {}).get("sunrise"),
+        "sunset": data.get("sys", {}).get("sunset"),
         "source": "OpenWeather",
         "recorded_at": data.get("dt"),
     }

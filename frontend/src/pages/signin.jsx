@@ -32,8 +32,13 @@ export default function Signin() {
 
       const store = remember ? localStorage : sessionStorage;
       store.setItem("token", data.access_token);
-      store.setItem("role", data.role || role);
-      navigate("/dashboard");
+      const profileResponse = await fetch(`${API_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${data.access_token}` },
+      });
+      const profile = await profileResponse.json().catch(() => ({}));
+      if (!profileResponse.ok) throw new Error(profile.detail || "Could not load your account.");
+      store.setItem("role", profile.role);
+      navigate(["rescuer", "responder"].includes(profile.role) ? "/responder" : "/dashboard");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -67,7 +72,7 @@ export default function Signin() {
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
             Remember me
           </label>
-          <a href="#" onClick={(e) => e.preventDefault()}>Forgot password?</a>
+          <Link to="/forgot-password">Forgot password?</Link>
         </div>
 
         {error && <p className="msg error">{error}</p>}

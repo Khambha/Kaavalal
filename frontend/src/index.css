@@ -712,6 +712,20 @@ button {
   gap: 5px;
 }
 
+.weather-condition {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+  color: #24515c;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.weather-condition img {
+  flex: 0 0 auto;
+}
+
 .weather-item {
   padding: 6px 8px;
   background: #f8fafc;

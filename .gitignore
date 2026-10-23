@@ -27,3 +27,18 @@ dist/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python virtual environments and cache
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Frontend build output
+node_modules/
+dist/

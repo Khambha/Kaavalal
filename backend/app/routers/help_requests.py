@@ -14,6 +14,7 @@ from fastapi import (
     Form,
     Request,
 )
+from sqlalchemy import or_
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import ValidationError
@@ -21,6 +22,7 @@ from pydantic import ValidationError
 from app.core.database import get_db
 from app.models.help_request import HelpRequest
 from app.models.user import User
+from app.models.responder_coverage import ResponderCoverage
 from app.schemas.help_request import (
     HelpRequestCreate,
     HelpRequestResponse,
@@ -161,10 +163,37 @@ def validate_district_and_lac(district: str, lac: str):
 
 
 def require_responder(current_user: User):
-    if current_user.role not in {"admin", "responder", "rescuer"}:
+    if current_user.role not in {"responder", "rescuer"}:
         raise HTTPException(
             status_code=403,
             detail="Only authorized response personnel can perform this action.",
+        )
+
+
+def responder_coverage_query(db: Session, user: User):
+    explicit_coverage = db.query(ResponderCoverage).filter(
+        ResponderCoverage.responder_id == user.id
+    ).all()
+    if explicit_coverage:
+        return [(item.district, item.lac) for item in explicit_coverage]
+    if user.district and user.nearest_lac:
+        return [(user.district, user.nearest_lac)]
+    return []
+
+
+def request_is_in_coverage(db: Session, user: User, request: HelpRequest):
+    return any(
+        district.casefold() == request.district.casefold()
+        and lac.casefold() == request.lac.casefold()
+        for district, lac in responder_coverage_query(db, user)
+    )
+
+
+def require_request_coverage(db: Session, user: User, request: HelpRequest):
+    if not request_is_in_coverage(db, user, request):
+        raise HTTPException(
+            status_code=403,
+            detail="This request is outside your assigned LAC coverage.",
         )
 
 
@@ -364,14 +393,13 @@ def get_request(
             detail="Help request not found.",
         )
 
-    if (
-        help_request.user_id != current_user.id
-        and current_user.role not in {"admin", "responder", "rescuer"}
-    ):
+    if help_request.user_id != current_user.id and current_user.role not in {"responder", "rescuer"}:
         raise HTTPException(
             status_code=403,
             detail="You cannot access this request.",
         )
+    if current_user.role in {"responder", "rescuer"} and help_request.user_id != current_user.id:
+        require_request_coverage(db, current_user, help_request)
 
     return help_request
 
@@ -397,11 +425,10 @@ def get_request_image(
     if not help_request:
         raise HTTPException(status_code=404, detail="Image not found.")
 
-    if (
-        help_request.user_id != current_user.id
-        and current_user.role not in {"admin", "responder", "rescuer"}
-    ):
+    if help_request.user_id != current_user.id and current_user.role not in {"responder", "rescuer"}:
         raise HTTPException(status_code=403, detail="Access denied.")
+    if current_user.role in {"responder", "rescuer"} and help_request.user_id != current_user.id:
+        require_request_coverage(db, current_user, help_request)
 
     path = UPLOAD_DIR / filename
 
@@ -411,6 +438,36 @@ def get_request_image(
     return FileResponse(path)
 
 
+@router.get("/responder/coverage")
+def get_responder_coverage(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_responder(current_user)
+    return [{"district": district, "lac": lac} for district, lac in responder_coverage_query(db, current_user)]
+
+
+@router.get("/responder/feed", response_model=list[HelpRequestResponse])
+def get_responder_feed(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_responder(current_user)
+    coverage = responder_coverage_query(db, current_user)
+    if not coverage:
+        return []
+    conditions = [
+        (HelpRequest.district.ilike(district) & HelpRequest.lac.ilike(lac))
+        for district, lac in coverage
+    ]
+    return (
+        db.query(HelpRequest)
+        .filter(or_(*conditions))
+        .order_by(HelpRequest.created_at.desc())
+        .all()
+    )
+
+
 @router.get("/", response_model=list[HelpRequestResponse])
 def get_all_requests(
     db: Session = Depends(get_db),
@@ -418,11 +475,36 @@ def get_all_requests(
 ):
     require_responder(current_user)
 
-    return (
+    return get_responder_feed(db=db, current_user=current_user)
+
+
+@router.post("/{request_id}/claim", response_model=HelpRequestResponse)
+def claim_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_responder(current_user)
+    request = (
         db.query(HelpRequest)
-        .order_by(HelpRequest.created_at.desc())
-        .all()
+        .filter(HelpRequest.id == request_id)
+        .with_for_update()
+        .first()
     )
+    if not request:
+        raise HTTPException(status_code=404, detail="Help request not found.")
+    require_request_coverage(db, current_user, request)
+    if request.status in {"Resolved", "Rejected"}:
+        raise HTTPException(status_code=409, detail="This request is already closed.")
+    if request.assigned_responder_id == current_user.id:
+        return request
+    if request.assigned_responder_id is not None:
+        raise HTTPException(status_code=409, detail="This request has already been claimed or assigned.")
+    request.assigned_responder_id = current_user.id
+    request.status = "Assigned"
+    db.commit()
+    db.refresh(request)
+    return request
 
 
 @router.patch("/{request_id}/status")
@@ -450,6 +532,12 @@ def update_request_status(
             status_code=404,
             detail="Help request not found.",
         )
+
+    require_request_coverage(db, current_user, help_request)
+    if help_request.status in {"Resolved", "Rejected"}:
+        raise HTTPException(status_code=409, detail="A closed request cannot be updated.")
+    if help_request.assigned_responder_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Claim this request before updating it.")
 
     help_request.status = status
     help_request.responder_notes = responder_notes
