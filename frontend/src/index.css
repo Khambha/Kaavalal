@@ -956,6 +956,7 @@ button {
   gap: 8px;
   font-size: 10px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
 }
 
 .legend-layer-title {

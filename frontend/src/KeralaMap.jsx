@@ -378,7 +378,6 @@ export default function KeralaMap({
                     fillOpacity: 0.92,
                     color: "#174f5d",
                   });
-                  l.bringToFront();
                 },
                 mouseout: (e) => {
                   e.target.setStyle(districtStyle(feature));
@@ -408,6 +407,7 @@ export default function KeralaMap({
                 <CircleMarker
                   center={[Number(lac.latitude), Number(lac.longitude)]}
                   radius={16}
+                  pane="markerPane"
                   pathOptions={{
                     color: "#0284c7",
                     weight: 2.2,
@@ -423,13 +423,15 @@ export default function KeralaMap({
               {/* Main LAC CircleMarker */}
               <CircleMarker
                 center={[Number(lac.latitude), Number(lac.longitude)]}
-                radius={isLacSelected ? 7 : 4}
+                pane="markerPane"
+                radius={isLacSelected ? 9 : 7}
                 pathOptions={{
                   color: isLacSelected ? "#0c4a6e" : "#ffffff",
-                  weight: isLacSelected ? 2.5 : 1.2,
+                  weight: isLacSelected ? 2.5 : 1.8,
                   fillColor: isLacSelected ? "#0284c7" : "#dc2626",
                   fillOpacity: isLacSelected ? 1 : 0.85,
                 }}
+                bubblingMouseEvents={false}
                 eventHandlers={{
                   click: () => {
                     if (onSelectLac) {
