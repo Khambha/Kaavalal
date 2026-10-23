@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.location import Location
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
