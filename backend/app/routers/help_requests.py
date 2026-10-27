@@ -1,0 +1,602 @@
+import json
+import os
+import uuid
+
+from pathlib import Path
+from typing import Optional
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    UploadFile,
+    File,
+    Form,
+    Request,
+)
+from sqlalchemy import or_
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+from pydantic import ValidationError
+
+from app.core.database import get_db
+from app.models.help_request import HelpRequest
+from app.models.user import User
+from app.models.responder_coverage import ResponderCoverage
+from app.models.shelter import RequestStatusEvent
+from app.services.request_tracking import record_status, event_public
+from app.schemas.help_request import (
+    HelpRequestCreate,
+    HelpRequestResponse,
+)
+
+# IMPORTANT:
+# Replace this import with your existing authentication dependency
+# if your project uses a different module or function name.
+from app.routers.auth import get_current_user
+
+
+router = APIRouter(
+    prefix="/api/help-requests",
+    tags=["Help Requests"],
+)
+
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+
+MAPPING_FILE = (
+    BASE_DIR.parent.parent
+    / "frontend"
+    / "src"
+    / "lac_locations.json"
+)
+
+DISTRICT_NAME_ALIASES = {
+    "TRIVANDRUM": "THIRUVANANTHAPURAM",
+    "TRICHUR": "THRISSUR",
+    "ERANAKULAM": "ERNAKULAM",
+    "WYNAD": "WAYANAD",
+}
+
+
+def canonical_district_name(name: str) -> str:
+    cleaned = str(name or "").strip().upper()
+    return DISTRICT_NAME_ALIASES.get(cleaned, cleaned)
+
+UPLOAD_DIR = BASE_DIR / "uploads" / "help_requests"
+UPLOAD_DIR = BASE_DIR / "uploads" / "help_requests"
+
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+ALLOWED_IMAGE_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
+
+ALLOWED_STATUSES = {
+    "Under Review",
+    "Assigned",
+    "In Progress",
+    "Resolved",
+    "Rejected",
+}
+
+
+def get_lac_mapping():
+    if not MAPPING_FILE.is_file():
+        raise HTTPException(
+            status_code=500,
+            detail=f"LAC mapping file not found: {MAPPING_FILE}",
+        )
+
+    try:
+        with MAPPING_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        constituencies = data.get("constituencies")
+
+        if not isinstance(constituencies, list):
+            raise HTTPException(
+                status_code=500,
+                detail="Invalid LAC mapping: 'constituencies' list is missing.",
+            )
+
+        mapping = {}
+
+        for item in constituencies:
+            district = item.get("district")
+            lac_name = item.get("lac_name")
+
+            if not district or not lac_name:
+                continue
+
+            district = canonical_district_name(district)
+            lac_name = lac_name.strip()
+
+            if district and lac_name:
+                mapping.setdefault(district, [])
+
+                if lac_name not in mapping[district]:
+                    mapping[district].append(lac_name)
+
+        if not mapping:
+            raise HTTPException(
+                status_code=500,
+                detail="No district and LAC entries were found in the mapping file.",
+            )
+
+        return mapping
+
+    except HTTPException:
+        raise
+
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"LAC mapping could not be loaded: {exc}",
+        ) from exc
+
+
+def validate_district_and_lac(district: str, lac: str):
+    mapping = get_lac_mapping()
+
+    district_options = {
+        name.casefold(): name
+        for name in mapping
+    }
+
+    actual_district = district_options.get(district.casefold())
+
+    if not actual_district:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid district.",
+        )
+
+    lac_options = mapping[actual_district]
+
+    actual_lac = next(
+        (
+            item
+            for item in lac_options
+            if item.casefold() == lac.casefold()
+        ),
+        None,
+    )
+
+    if not actual_lac:
+        raise HTTPException(
+            status_code=422,
+            detail="The selected LAC does not belong to the selected district.",
+        )
+
+    return actual_district, actual_lac
+
+
+def require_responder(current_user: User):
+    if current_user.role not in {"responder", "rescuer"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only authorized response personnel can perform this action.",
+        )
+
+
+def responder_coverage_query(db: Session, user: User):
+    explicit_coverage = db.query(ResponderCoverage).filter(
+        ResponderCoverage.responder_id == user.id
+    ).all()
+    if explicit_coverage:
+        return [(item.district, item.lac) for item in explicit_coverage]
+    if user.district and user.nearest_lac:
+        return [(user.district, user.nearest_lac)]
+    return []
+
+
+def request_is_in_coverage(db: Session, user: User, request: HelpRequest):
+    return any(
+        district.casefold() == request.district.casefold()
+        and lac.casefold() == request.lac.casefold()
+        for district, lac in responder_coverage_query(db, user)
+    )
+
+
+def require_request_coverage(db: Session, user: User, request: HelpRequest):
+    if not request_is_in_coverage(db, user, request):
+        raise HTTPException(
+            status_code=403,
+            detail="This request is outside your assigned LAC coverage.",
+        )
+
+
+async def save_image(file: Optional[UploadFile]):
+    if not file or not file.filename:
+        return None
+
+    extension = ALLOWED_IMAGE_TYPES.get(file.content_type)
+
+    if extension is None:
+        raise HTTPException(
+            status_code=415,
+            detail="Only JPEG, PNG, and WebP images are allowed.",
+        )
+
+    content = await file.read(MAX_UPLOAD_BYTES + 1)
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded image is empty.",
+        )
+
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Image size must not exceed 5 MB.",
+        )
+
+    # Check common file signatures rather than trusting the MIME type alone.
+    valid_signatures = {
+        ".jpg": content.startswith(b"\xff\xd8\xff"),
+        ".png": content.startswith(b"\x89PNG\r\n\x1a\n"),
+        ".webp": (
+            len(content) >= 12
+            and content.startswith(b"RIFF")
+            and content[8:12] == b"WEBP"
+        ),
+    }
+
+    if not valid_signatures[extension]:
+        raise HTTPException(
+            status_code=415,
+            detail="The uploaded file does not match its image type.",
+        )
+
+    filename = f"{uuid.uuid4().hex}{extension}"
+    destination = UPLOAD_DIR / filename
+
+    destination.write_bytes(content)
+
+    return filename
+
+
+@router.get("/districts")
+def get_districts():
+    mapping = get_lac_mapping()
+
+    return {
+        "districts": list(mapping.keys())
+    }
+@router.get("/lacs/{district}")
+def get_lacs(district: str):
+    mapping = get_lac_mapping()
+
+    requested_district = district.strip().casefold()
+
+    actual_district = next(
+        (
+            name
+            for name in mapping
+            if name.strip().casefold() == requested_district
+        ),
+        None,
+    )
+
+    if actual_district is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": "District not found.",
+                "requested_district": district,
+                "available_districts": list(mapping.keys()),
+            },
+        )
+
+    return {
+        "district": actual_district,
+        "lacs": mapping[actual_district],
+    }
+
+
+
+@router.post("/", response_model=HelpRequestResponse, status_code=201)
+async def create_help_request(
+    request: Request,
+    district: str = Form(...),
+    lac: str = Form(...),
+    location_description: str = Form(...),
+    emergency_type: str = Form(...),
+    people_affected: int = Form(...),
+    special_assistance: Optional[str] = Form(None),
+    urgency: str = Form(...),
+    situation_description: str = Form(...),
+    latitude: Optional[float] = Form(None),
+    longitude: Optional[float] = Form(None),
+    client_request_id: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        data = HelpRequestCreate(
+            district=district,
+            lac=lac,
+            location_description=location_description,
+            emergency_type=emergency_type,
+            people_affected=people_affected,
+            special_assistance=special_assistance,
+            urgency=urgency,
+            situation_description=situation_description,
+            latitude=latitude,
+            longitude=longitude,
+        )
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=exc.errors(include_input=False),
+        )
+
+    actual_district, actual_lac = validate_district_and_lac(
+        data.district,
+        data.lac,
+    )
+
+    if client_request_id and (len(client_request_id) > 36 or len(client_request_id) < 16):
+        raise HTTPException(status_code=422, detail="Invalid client request identifier.")
+    if client_request_id:
+        existing = db.query(HelpRequest).filter(HelpRequest.client_request_id == client_request_id).first()
+        if existing:
+            if existing.user_id != current_user.id:
+                raise HTTPException(status_code=409, detail="This request identifier is already in use.")
+            return existing
+
+    saved_image = await save_image(image)
+
+    urgency_base = {"Critical": 15, "High": 30, "Medium": 60, "Low": 120}.get(data.urgency, 60)
+    active_in_area = db.query(HelpRequest).filter(
+        HelpRequest.district.ilike(actual_district), HelpRequest.lac.ilike(actual_lac),
+        HelpRequest.status.in_(["Submitted", "Under Review", "Assigned", "In Progress"]),
+    ).count()
+    estimate = min(360, urgency_base + max(0, active_in_area - 2) * 10)
+    help_request = HelpRequest(
+        user_id=current_user.id,
+        district=actual_district,
+        lac=actual_lac,
+        location_description=data.location_description,
+        latitude=data.latitude,
+        longitude=data.longitude,
+        emergency_type=data.emergency_type,
+        people_affected=data.people_affected,
+        special_assistance=data.special_assistance,
+        urgency=data.urgency,
+        situation_description=data.situation_description,
+        image_path=saved_image,
+        status="Submitted",
+        client_request_id=client_request_id,
+        eta_estimate_minutes=estimate,
+    )
+
+    try:
+        db.add(help_request)
+        db.flush()
+        record_status(db, help_request_id=help_request.id, status="Submitted", actor_role="system", note="Request received and routed to the response team for this area.")
+        db.commit()
+        db.refresh(help_request)
+    except Exception:
+        db.rollback()
+
+        if saved_image:
+            (UPLOAD_DIR / saved_image).unlink(missing_ok=True)
+
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save the help request.",
+        )
+
+    return help_request
+
+
+@router.get("/my", response_model=list[HelpRequestResponse])
+def get_my_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return (
+        db.query(HelpRequest)
+        .filter(HelpRequest.user_id == current_user.id)
+        .order_by(HelpRequest.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/my/{request_id}/history")
+def get_my_request_history(request_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    item = db.get(HelpRequest, request_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Help request not found.")
+    if item.user_id != current_user.id:
+        if current_user.role not in {"responder", "rescuer"}:
+            raise HTTPException(status_code=403, detail="You cannot access this request history.")
+        require_request_coverage(db, current_user, item)
+    events = db.query(RequestStatusEvent).filter(RequestStatusEvent.help_request_id == item.id).order_by(RequestStatusEvent.created_at.asc(), RequestStatusEvent.id.asc()).all()
+    return [event_public(event) for event in events]
+
+
+@router.get("/{request_id}", response_model=HelpRequestResponse)
+def get_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    help_request = db.query(HelpRequest).filter(
+        HelpRequest.id == request_id
+    ).first()
+
+    if not help_request:
+        raise HTTPException(
+            status_code=404,
+            detail="Help request not found.",
+        )
+
+    if help_request.user_id != current_user.id and current_user.role not in {"responder", "rescuer"}:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot access this request.",
+        )
+    if current_user.role in {"responder", "rescuer"} and help_request.user_id != current_user.id:
+        require_request_coverage(db, current_user, help_request)
+
+    return help_request
+
+
+@router.get("/files/{filename}")
+def get_request_image(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Only allow generated image names, never arbitrary filesystem paths.
+    if (
+        "/" in filename
+        or "\\" in filename
+        or filename in {".", ".."}
+    ):
+        raise HTTPException(status_code=400, detail="Invalid filename.")
+
+    help_request = db.query(HelpRequest).filter(
+        HelpRequest.image_path == filename
+    ).first()
+
+    if not help_request:
+        raise HTTPException(status_code=404, detail="Image not found.")
+
+    if help_request.user_id != current_user.id and current_user.role not in {"responder", "rescuer"}:
+        raise HTTPException(status_code=403, detail="Access denied.")
+    if current_user.role in {"responder", "rescuer"} and help_request.user_id != current_user.id:
+        require_request_coverage(db, current_user, help_request)
+
+    path = UPLOAD_DIR / filename
+
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Image file not found.")
+
+    return FileResponse(path)
+
+
+@router.get("/responder/coverage")
+def get_responder_coverage(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_responder(current_user)
+    return [{"district": district, "lac": lac} for district, lac in responder_coverage_query(db, current_user)]
+
+
+@router.get("/responder/feed", response_model=list[HelpRequestResponse])
+def get_responder_feed(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_responder(current_user)
+    coverage = responder_coverage_query(db, current_user)
+    if not coverage:
+        return []
+    conditions = [
+        (HelpRequest.district.ilike(district) & HelpRequest.lac.ilike(lac))
+        for district, lac in coverage
+    ]
+    return (
+        db.query(HelpRequest)
+        .filter(or_(*conditions))
+        .order_by(HelpRequest.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/", response_model=list[HelpRequestResponse])
+def get_all_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_responder(current_user)
+
+    return get_responder_feed(db=db, current_user=current_user)
+
+
+@router.post("/{request_id}/claim", response_model=HelpRequestResponse)
+def claim_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_responder(current_user)
+    request = (
+        db.query(HelpRequest)
+        .filter(HelpRequest.id == request_id)
+        .with_for_update()
+        .first()
+    )
+    if not request:
+        raise HTTPException(status_code=404, detail="Help request not found.")
+    require_request_coverage(db, current_user, request)
+    if request.status in {"Resolved", "Rejected"}:
+        raise HTTPException(status_code=409, detail="This request is already closed.")
+    if request.assigned_responder_id == current_user.id:
+        return request
+    if request.assigned_responder_id is not None:
+        raise HTTPException(status_code=409, detail="This request has already been claimed or assigned.")
+    request.assigned_responder_id = current_user.id
+    request.status = "Assigned"
+    record_status(db, help_request_id=request.id, status="Assigned", actor_role=current_user.role, note="A responder claimed this request.")
+    db.commit()
+    db.refresh(request)
+    return request
+
+
+@router.patch("/{request_id}/status")
+def update_request_status(
+    request_id: int,
+    status: str,
+    responder_notes: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_responder(current_user)
+
+    if status not in ALLOWED_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid status.",
+        )
+
+    help_request = db.query(HelpRequest).filter(
+        HelpRequest.id == request_id
+    ).first()
+
+    if not help_request:
+        raise HTTPException(
+            status_code=404,
+            detail="Help request not found.",
+        )
+
+    require_request_coverage(db, current_user, help_request)
+    if help_request.status in {"Resolved", "Rejected"}:
+        raise HTTPException(status_code=409, detail="A closed request cannot be updated.")
+    if help_request.assigned_responder_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Claim this request before updating it.")
+
+    previous_status = help_request.status
+    help_request.status = status
+    help_request.responder_notes = responder_notes
+    if status != previous_status:
+        record_status(db, help_request_id=help_request.id, status=status, actor_role=current_user.role, note=responder_notes or f"Request status updated to {status}.")
+
+    db.commit()
+    db.refresh(help_request)
+
+    return {
+        "message": "Request status updated.",
+        "request": HelpRequestResponse.model_validate(help_request),
+    }

@@ -43,15 +43,16 @@
   padding: 0;
 }
 
-html, body {
-  height: 100%;
-  width: 100%;
-  overflow: hidden; /* STRICT ONE-LEVEL ENFORCEMENT - ZERO WINDOW SCROLLBAR */
-  font-family: var(--font-sans);
-  background: var(--bg-app);
-  color: var(--text-main);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+html,
+body,
+#root {
+  min-height: 100%;
+  height: auto;
+}
+
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 #root {
@@ -711,6 +712,20 @@ button {
   gap: 5px;
 }
 
+.weather-condition {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+  color: #24515c;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.weather-condition img {
+  flex: 0 0 auto;
+}
+
 .weather-item {
   padding: 6px 8px;
   background: #f8fafc;
@@ -941,6 +956,7 @@ button {
   gap: 8px;
   font-size: 10px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
 }
 
 .legend-layer-title {
@@ -1092,4 +1108,67 @@ button {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+
+/* ==================================================
+   SEEK HELP PAGE SCROLL FIX
+   Keep the dashboard fixed, but allow the Help page
+   to scroll when its content exceeds the viewport.
+   ================================================== */
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+#root {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+/* Normal dashboard remains viewport-locked */
+.app {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+/* Allow scrolling only on the Seek Help view */
+.app.app-help-view {
+  width: 100%;
+  min-height: 100vh;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.app.app-help-view .navbar {
+  flex: 0 0 48px;
+}
+
+.app.app-help-view .help-main {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+  padding: 24px 24px 48px;
+}
+
+.app.app-help-view .footer {
+  flex: 0 0 26px;
+}
+
+@media (max-width: 680px) {
+  .app.app-help-view .help-main {
+    padding: 16px 12px 36px;
+  }
 }

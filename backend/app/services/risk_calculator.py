@@ -1,13 +1,15 @@
+import re
 from typing import Optional
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.hazard import HazardData
 from app.models.risk import RiskData
 
 
-# Prototype-only values. Replace with validated, documented scoring
-# rules before presenting results as real-world risk assessments.
+# Prototype-only scoring values.
+# These are illustrative labels, NOT validated disaster probabilities.
 HAZARD_LEVEL_SCORES = {
     "LOW": 25.0,
     "MODERATE": 50.0,
@@ -15,20 +17,38 @@ HAZARD_LEVEL_SCORES = {
     "VERY HIGH": 100.0,
 }
 
+REQUIRED_HAZARDS = (
+    "flood_level",
+    "landslide_level",
+    "drought_level",
+)
+
 
 def score_hazard_level(level: Optional[str]) -> Optional[float]:
-    """Convert a known hazard label into a prototype score."""
-    if not level:
+    """Convert a recognized hazard label into an illustrative score."""
+
+    if level is None or not level.strip():
         return None
 
-    return HAZARD_LEVEL_SCORES.get(level.strip().upper())
+    normalized_level = re.sub(r"\s+", " ", level).strip().upper()
+    return HAZARD_LEVEL_SCORES.get(normalized_level)
 
 
-def calculate_baseline_risk(db: Session, location_id: int) -> RiskData:
+def calculate_baseline_risk(
+    db: Session,
+    location_id: int,
+) -> RiskData:
     """
-    Calculate and save a prototype risk record from the latest
-    available hazard-level record for a location.
+    Calculate and save illustrative baseline risk from the latest
+    hazard record.
+
+    All three required hazard levels must be present and recognized.
+    Missing or invalid levels are never silently treated as zero.
     """
+
+    if location_id <= 0:
+        raise ValueError("Location ID must be a positive integer")
+
     hazards = (
         db.query(HazardData)
         .filter(HazardData.location_id == location_id)
@@ -37,33 +57,59 @@ def calculate_baseline_risk(db: Session, location_id: int) -> RiskData:
     )
 
     if hazards is None:
-        raise ValueError("No hazard data available for this location")
+        raise ValueError(
+            "No hazard data available for this location"
+        )
 
-    flood_score = score_hazard_level(hazards.flood_level)
-    landslide_score = score_hazard_level(hazards.landslide_level)
-    drought_score = score_hazard_level(hazards.drought_level)
+    # Validate all required hazard levels before calculating.
+    scores = {}
 
-    available_scores = [
-        score
-        for score in (flood_score, landslide_score, drought_score)
-        if score is not None
-    ]
+    for field in REQUIRED_HAZARDS:
+        level = getattr(hazards, field)
+        score = score_hazard_level(level)
 
-    if not available_scores:
-        raise ValueError("No usable hazard levels available for scoring")
+        if score is None:
+            raise ValueError(
+                f"Missing or unsupported hazard level for {field}. "
+                "Expected LOW, MODERATE, HIGH, or VERY HIGH."
+            )
 
-    overall_score = sum(available_scores) / len(available_scores)
+        if not 0 <= score <= 100:
+            raise ValueError(
+                f"Invalid score generated for {field}"
+            )
+
+        scores[field] = score
+
+    flood_score = scores["flood_level"]
+    landslide_score = scores["landslide_level"]
+    drought_score = scores["drought_level"]
+
+    # Equal-weight average for the prototype only.
+    overall_score = round(
+        (flood_score + landslide_score + drought_score) / 3,
+        2,
+    )
+
+    if not 0 <= overall_score <= 100:
+        raise ValueError(
+            "Calculated overall risk is outside the valid 0–100 range"
+        )
 
     risk_record = RiskData(
         location_id=location_id,
         flood_risk=flood_score,
         landslide_risk=landslide_score,
         drought_risk=drought_score,
-        overall_risk=round(overall_score, 2),
+        overall_risk=overall_score,
     )
 
-    db.add(risk_record)
-    db.commit()
-    db.refresh(risk_record)
+    try:
+        db.add(risk_record)
+        db.commit()
+        db.refresh(risk_record)
+    except SQLAlchemyError:
+        db.rollback()
+        raise
 
     return risk_record

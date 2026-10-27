@@ -2,7 +2,7 @@
 import json
 from urllib.error import URLError
 from urllib.request import urlopen
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -168,6 +168,82 @@ DISTRICT_COORDS = {
 }
 
 
+def fetch_open_meteo_current(lat: float, lng: float):
+    """Fetch current conditions for a WGS84 point from Open-Meteo."""
+    url = (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}"
+        f"&longitude={lng}"
+        "&current=temperature_2m,relative_humidity_2m,"
+        "precipitation,wind_speed_10m"
+        "&timezone=Asia%2FKolkata"
+    )
+    try:
+        with urlopen(url, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (URLError, TimeoutError):
+        raise HTTPException(status_code=503, detail="Weather service is temporarily unavailable")
+
+    current = payload.get("current")
+    if current is None:
+        raise HTTPException(status_code=502, detail="Weather data is unavailable")
+    return current
+
+
+@router.get("/{district_id}/lacs/{lac_code}/weather")
+def get_lac_weather(
+    district_id: int,
+    lac_code: str,
+    latitude: float | None = Query(default=None, ge=8.0, le=13.0),
+    longitude: float | None = Query(default=None, ge=74.0, le=78.0),
+    db: Session = Depends(get_db),
+):
+    """Return live weather for a LAC coordinate, falling back to its map coordinate."""
+    district = (
+        db.query(Location)
+        .filter(Location.id == district_id, Location.location_type == "DISTRICT")
+        .first()
+    )
+    if district is None:
+        raise HTTPException(status_code=404, detail="District not found")
+
+    lac = (
+        db.query(Location)
+        .filter(
+            Location.parent_id == district_id,
+            Location.location_type == "LAC",
+            Location.administrative_code == lac_code,
+        )
+        .first()
+    )
+
+    # Prefer coordinates maintained by the backend. The frontend supplies its
+    # public LAC centroid only when the local database has no coordinates yet.
+    lat = lac.latitude if lac and lac.latitude is not None else latitude
+    lng = lac.longitude if lac and lac.longitude is not None else longitude
+    if lat is None or lng is None:
+        raise HTTPException(status_code=400, detail="LAC latitude and longitude are required")
+    if not (8.0 <= lat <= 13.0 and 74.0 <= lng <= 78.0):
+        raise HTTPException(status_code=422, detail="LAC coordinates must be within Kerala")
+
+    current = fetch_open_meteo_current(lat, lng)
+    return {
+        "district_id": district.id,
+        "district": district.name,
+        "lac_code": lac_code,
+        "lac": lac.name if lac else None,
+        "latitude": lat,
+        "longitude": lng,
+        "temperature": current.get("temperature_2m"),
+        "humidity": current.get("relative_humidity_2m"),
+        "rainfall": current.get("precipitation"),
+        "wind_speed": current.get("wind_speed_10m"),
+        "time": current.get("time"),
+        "source": "Open-Meteo",
+        "scope": "LAC coordinates",
+    }
+
+
 @router.get("/{district_id}/weather")
 def get_district_weather(
     district_id: int,
@@ -195,33 +271,7 @@ def get_district_weather(
         fallback = DISTRICT_COORDS.get(district.name.strip().upper(), (10.5, 76.2))
         lat, lng = fallback
 
-    url = (
-        "https://api.open-meteo.com/v1/forecast"
-        f"?latitude={lat}"
-        f"&longitude={lng}"
-        "&current=temperature_2m,relative_humidity_2m,"
-        "precipitation,wind_speed_10m"
-        "&timezone=Asia%2FKolkata"
-    )
-
-    try:
-        with urlopen(url, timeout=10) as response:
-            weather = json.loads(
-                response.read().decode("utf-8")
-            )
-    except (URLError, TimeoutError):
-        raise HTTPException(
-            status_code=503,
-            detail="Weather service is temporarily unavailable",
-        )
-
-    current = weather.get("current")
-
-    if current is None:
-        raise HTTPException(
-            status_code=502,
-            detail="Weather data is unavailable",
-        )
+    current = fetch_open_meteo_current(lat, lng)
 
     return {
         "district_id": district.id,

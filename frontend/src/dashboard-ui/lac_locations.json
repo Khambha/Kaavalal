@@ -1,0 +1,1067 @@
+{
+  "constituencies": [
+    {
+      "lac_code": "001",
+      "lac_name": "MANJESHWAR",
+      "district": "KASARAGOD",
+      "latitude": 12.7242,
+      "longitude": 74.8876
+    },
+    {
+      "lac_code": "002",
+      "lac_name": "KASARAGOD",
+      "district": "KASARAGOD",
+      "latitude": 12.5076,
+      "longitude": 74.9882
+    },
+    {
+      "lac_code": "003",
+      "lac_name": "UDMA",
+      "district": "KASARAGOD",
+      "latitude": 12.444,
+      "longitude": 75.024
+    },
+    {
+      "lac_code": "004",
+      "lac_name": "KANHANGAD",
+      "district": "KASARAGOD",
+      "latitude": 12.3,
+      "longitude": 75.09
+    },
+    {
+      "lac_code": "005",
+      "lac_name": "TRIKARIPUR",
+      "district": "KASARAGOD",
+      "latitude": 12.14389,
+      "longitude": 75.17889
+    },
+    {
+      "lac_code": "006",
+      "lac_name": "PAYYANNUR",
+      "district": "KANNUR",
+      "latitude": 12.1,
+      "longitude": 75.2
+    },
+    {
+      "lac_code": "007",
+      "lac_name": "KALLIASSERI",
+      "district": "KANNUR",
+      "latitude": 11.9712,
+      "longitude": 75.3616
+    },
+    {
+      "lac_code": "008",
+      "lac_name": "TALIPARAMBA",
+      "district": "KANNUR",
+      "latitude": 12.0383,
+      "longitude": 75.3675
+    },
+    {
+      "lac_code": "009",
+      "lac_name": "IRIKKUR",
+      "district": "KANNUR",
+      "latitude": 11.9869,
+      "longitude": 75.5539
+    },
+    {
+      "lac_code": "010",
+      "lac_name": "AZHIKODE",
+      "district": "KANNUR",
+      "latitude": 11.9186,
+      "longitude": 75.3358
+    },
+    {
+      "lac_code": "011",
+      "lac_name": "KANNUR",
+      "district": "KANNUR",
+      "latitude": 11.8745,
+      "longitude": 75.3704
+    },
+    {
+      "lac_code": "012",
+      "lac_name": "DHARMADAM",
+      "district": "KANNUR",
+      "latitude": 11.7754,
+      "longitude": 75.4646
+    },
+    {
+      "lac_code": "013",
+      "lac_name": "THALASSERY",
+      "district": "KANNUR",
+      "latitude": 11.7481,
+      "longitude": 75.4929
+    },
+    {
+      "lac_code": "014",
+      "lac_name": "KUTHUPARAMBA",
+      "district": "KANNUR",
+      "latitude": 11.83,
+      "longitude": 75.58
+    },
+    {
+      "lac_code": "015",
+      "lac_name": "MATTANNUR",
+      "district": "KANNUR",
+      "latitude": 11.931,
+      "longitude": 75.572
+    },
+    {
+      "lac_code": "016",
+      "lac_name": "PERAVOOR",
+      "district": "KANNUR",
+      "latitude": 11.8962,
+      "longitude": 75.7342
+    },
+    {
+      "lac_code": "017",
+      "lac_name": "MANANTHAVADY (ST)",
+      "district": "WYNAD",
+      "latitude": 11.8014,
+      "longitude": 76.0044
+    },
+    {
+      "lac_code": "018",
+      "lac_name": "SULTHANBATHERY (ST)",
+      "district": "WYNAD",
+      "latitude": 11.67,
+      "longitude": 76.28
+    },
+    {
+      "lac_code": "019",
+      "lac_name": "KALPETTA",
+      "district": "WYNAD",
+      "latitude": 11.6106,
+      "longitude": 76.0822
+    },
+    {
+      "lac_code": "020",
+      "lac_name": "VADAKARA",
+      "district": "KOZHIKODE",
+      "latitude": 11.6085,
+      "longitude": 75.5917
+    },
+    {
+      "lac_code": "021",
+      "lac_name": "KUTTIADI",
+      "district": "KOZHIKODE",
+      "latitude": 11.65487,
+      "longitude": 75.75438
+    },
+    {
+      "lac_code": "022",
+      "lac_name": "NADAPURAM",
+      "district": "KOZHIKODE",
+      "latitude": 11.7109,
+      "longitude": 75.6562
+    },
+    {
+      "lac_code": "023",
+      "lac_name": "QUILANDY",
+      "district": "KOZHIKODE",
+      "latitude": 11.43,
+      "longitude": 75.7
+    },
+    {
+      "lac_code": "024",
+      "lac_name": "PERAMBRA",
+      "district": "KOZHIKODE",
+      "latitude": 11.5575,
+      "longitude": 75.7605
+    },
+    {
+      "lac_code": "025",
+      "lac_name": "BALUSSERI (SC)",
+      "district": "KOZHIKODE",
+      "latitude": 11.45,
+      "longitude": 75.83
+    },
+    {
+      "lac_code": "026",
+      "lac_name": "ELATHUR",
+      "district": "KOZHIKODE",
+      "latitude": 11.34361,
+      "longitude": 75.73854
+    },
+    {
+      "lac_code": "027",
+      "lac_name": "KOZHIKODE NORTH",
+      "district": "KOZHIKODE",
+      "latitude": 11.258753,
+      "longitude": 75.780411
+    },
+    {
+      "lac_code": "028",
+      "lac_name": "KOZHIKODE SOUTH",
+      "district": "KOZHIKODE",
+      "latitude": 11.2588,
+      "longitude": 75.7804
+    },
+    {
+      "lac_code": "029",
+      "lac_name": "BEYPORE",
+      "district": "KOZHIKODE",
+      "latitude": 11.1715,
+      "longitude": 75.8061
+    },
+    {
+      "lac_code": "030",
+      "lac_name": "KUNNAMANGALAM",
+      "district": "KOZHIKODE",
+      "latitude": 11.3047,
+      "longitude": 75.8778
+    },
+    {
+      "lac_code": "031",
+      "lac_name": "KODUVALLY",
+      "district": "KOZHIKODE",
+      "latitude": 11.3597,
+      "longitude": 75.9129
+    },
+    {
+      "lac_code": "032",
+      "lac_name": "THIRUVAMBADY",
+      "district": "KOZHIKODE",
+      "latitude": 11.3611,
+      "longitude": 76.0095
+    },
+    {
+      "lac_code": "033",
+      "lac_name": "KONDOTTY",
+      "district": "MALAPPURAM",
+      "latitude": 11.1423,
+      "longitude": 75.9657
+    },
+    {
+      "lac_code": "034",
+      "lac_name": "ERANAD",
+      "district": "MALAPPURAM",
+      "latitude": 11.1342,
+      "longitude": 76.096
+    },
+    {
+      "lac_code": "035",
+      "lac_name": "NILAMBUR",
+      "district": "MALAPPURAM",
+      "latitude": 11.2785,
+      "longitude": 76.2398
+    },
+    {
+      "lac_code": "036",
+      "lac_name": "WANDOOR (SC)",
+      "district": "MALAPPURAM",
+      "latitude": 11.195,
+      "longitude": 76.236
+    },
+    {
+      "lac_code": "037",
+      "lac_name": "MANJERI",
+      "district": "MALAPPURAM",
+      "latitude": 11.1202,
+      "longitude": 76.1167
+    },
+    {
+      "lac_code": "038",
+      "lac_name": "PERINTHALMANNA",
+      "district": "MALAPPURAM",
+      "latitude": 10.9755,
+      "longitude": 76.2305
+    },
+    {
+      "lac_code": "039",
+      "lac_name": "MANKADA",
+      "district": "MALAPPURAM",
+      "latitude": 11.0189,
+      "longitude": 76.0734
+    },
+    {
+      "lac_code": "040",
+      "lac_name": "MALAPPURAM",
+      "district": "MALAPPURAM",
+      "latitude": 11.072,
+      "longitude": 76.074
+    },
+    {
+      "lac_code": "041",
+      "lac_name": "VENGARA",
+      "district": "MALAPPURAM",
+      "latitude": 11.0511,
+      "longitude": 75.9829
+    },
+    {
+      "lac_code": "042",
+      "lac_name": "VALLIKKUNNU",
+      "district": "MALAPPURAM",
+      "latitude": 11.0927,
+      "longitude": 75.8447
+    },
+    {
+      "lac_code": "043",
+      "lac_name": "TIRURANGADI",
+      "district": "MALAPPURAM",
+      "latitude": 11.0422,
+      "longitude": 75.9279
+    },
+    {
+      "lac_code": "044",
+      "lac_name": "TANUR",
+      "district": "MALAPPURAM",
+      "latitude": 10.982,
+      "longitude": 75.8754
+    },
+    {
+      "lac_code": "045",
+      "lac_name": "TIRUR",
+      "district": "MALAPPURAM",
+      "latitude": 10.9146,
+      "longitude": 75.9221
+    },
+    {
+      "lac_code": "046",
+      "lac_name": "KOTTAKKAL",
+      "district": "MALAPPURAM",
+      "latitude": 11.0022,
+      "longitude": 75.9988
+    },
+    {
+      "lac_code": "047",
+      "lac_name": "THAVANUR",
+      "district": "MALAPPURAM",
+      "latitude": 10.8514,
+      "longitude": 75.9986
+    },
+    {
+      "lac_code": "048",
+      "lac_name": "PONNANI",
+      "district": "MALAPPURAM",
+      "latitude": 10.7677,
+      "longitude": 75.9259
+    },
+    {
+      "lac_code": "049",
+      "lac_name": "THRITHALA",
+      "district": "PALAKKAD",
+      "latitude": 10.803,
+      "longitude": 76.129
+    },
+    {
+      "lac_code": "050",
+      "lac_name": "PATTAMBI",
+      "district": "PALAKKAD",
+      "latitude": 10.8068,
+      "longitude": 76.1965
+    },
+    {
+      "lac_code": "051",
+      "lac_name": "SHORNUR",
+      "district": "PALAKKAD",
+      "latitude": 10.7626,
+      "longitude": 76.2694
+    },
+    {
+      "lac_code": "052",
+      "lac_name": "OTTAPALAM",
+      "district": "PALAKKAD",
+      "latitude": 10.77,
+      "longitude": 76.3737
+    },
+    {
+      "lac_code": "053",
+      "lac_name": "KONGAD (SC)",
+      "district": "PALAKKAD",
+      "latitude": 10.854,
+      "longitude": 76.5216
+    },
+    {
+      "lac_code": "054",
+      "lac_name": "MANNARKAD",
+      "district": "PALAKKAD",
+      "latitude": 10.98,
+      "longitude": 76.47
+    },
+    {
+      "lac_code": "055",
+      "lac_name": "MALAMPUZHA",
+      "district": "PALAKKAD",
+      "latitude": 10.832,
+      "longitude": 76.6531
+    },
+    {
+      "lac_code": "056",
+      "lac_name": "PALAKKAD",
+      "district": "PALAKKAD",
+      "latitude": 10.7847,
+      "longitude": 76.6548
+    },
+    {
+      "lac_code": "057",
+      "lac_name": "TARUR (SC)",
+      "district": "PALAKKAD",
+      "latitude": 10.6558,
+      "longitude": 76.4694
+    },
+    {
+      "lac_code": "058",
+      "lac_name": "CHITTUR",
+      "district": "PALAKKAD",
+      "latitude": 10.5763,
+      "longitude": 76.6953
+    },
+    {
+      "lac_code": "059",
+      "lac_name": "NENMARA",
+      "district": "PALAKKAD",
+      "latitude": 10.5934,
+      "longitude": 76.6006
+    },
+    {
+      "lac_code": "060",
+      "lac_name": "ALATHUR",
+      "district": "PALAKKAD",
+      "latitude": 10.647,
+      "longitude": 76.545
+    },
+    {
+      "lac_code": "061",
+      "lac_name": "CHELAKKARA (SC)",
+      "district": "TRICHUR",
+      "latitude": 10.7041,
+      "longitude": 76.3206
+    },
+    {
+      "lac_code": "062",
+      "lac_name": "KUNNAMKULAM",
+      "district": "TRICHUR",
+      "latitude": 10.6484,
+      "longitude": 76.0694
+    },
+    {
+      "lac_code": "063",
+      "lac_name": "GURUVAYOOR",
+      "district": "TRICHUR",
+      "latitude": 10.5947,
+      "longitude": 76.0397
+    },
+    {
+      "lac_code": "064",
+      "lac_name": "MANALUR",
+      "district": "TRICHUR",
+      "latitude": 10.498,
+      "longitude": 76.1002
+    },
+    {
+      "lac_code": "065",
+      "lac_name": "WADAKKANCHERY",
+      "district": "TRICHUR",
+      "latitude": 10.6617,
+      "longitude": 76.2455
+    },
+    {
+      "lac_code": "066",
+      "lac_name": "OLLUR",
+      "district": "TRICHUR",
+      "latitude": 10.4785,
+      "longitude": 76.237
+    },
+    {
+      "lac_code": "067",
+      "lac_name": "THRISSUR",
+      "district": "TRICHUR",
+      "latitude": 10.5231,
+      "longitude": 76.2147
+    },
+    {
+      "lac_code": "068",
+      "lac_name": "NATTIKA (SC)",
+      "district": "TRICHUR",
+      "latitude": 10.4072,
+      "longitude": 76.115
+    },
+    {
+      "lac_code": "069",
+      "lac_name": "KAIPAMANGALAM",
+      "district": "TRICHUR",
+      "latitude": 10.335,
+      "longitude": 76.139
+    },
+    {
+      "lac_code": "070",
+      "lac_name": "IRINJALAKKUDA",
+      "district": "TRICHUR",
+      "latitude": 10.3454,
+      "longitude": 76.2094
+    },
+    {
+      "lac_code": "071",
+      "lac_name": "PUTHUKKAD",
+      "district": "TRICHUR",
+      "latitude": 10.4212,
+      "longitude": 76.2703
+    },
+    {
+      "lac_code": "072",
+      "lac_name": "CHALAKKUDY",
+      "district": "TRICHUR",
+      "latitude": 10.307,
+      "longitude": 76.332
+    },
+    {
+      "lac_code": "073",
+      "lac_name": "KODUNGALLUR",
+      "district": "TRICHUR",
+      "latitude": 10.2167,
+      "longitude": 76.2167
+    },
+    {
+      "lac_code": "074",
+      "lac_name": "PERUMBAVOOR",
+      "district": "ERANAKULAM",
+      "latitude": 10.10695,
+      "longitude": 76.47366
+    },
+    {
+      "lac_code": "075",
+      "lac_name": "ANGAMALY",
+      "district": "ERANAKULAM",
+      "latitude": 10.196,
+      "longitude": 76.386
+    },
+    {
+      "lac_code": "076",
+      "lac_name": "ALUVA",
+      "district": "ERANAKULAM",
+      "latitude": 10.1078,
+      "longitude": 76.3507
+    },
+    {
+      "lac_code": "077",
+      "lac_name": "KALAMASSERY",
+      "district": "ERANAKULAM",
+      "latitude": 10.0614,
+      "longitude": 76.32631
+    },
+    {
+      "lac_code": "078",
+      "lac_name": "PARAVUR",
+      "district": "ERANAKULAM",
+      "latitude": 10.140487,
+      "longitude": 76.23053
+    },
+    {
+      "lac_code": "079",
+      "lac_name": "VYPEN",
+      "district": "ERANAKULAM",
+      "latitude": 9.973429,
+      "longitude": 76.24414
+    },
+    {
+      "lac_code": "080",
+      "lac_name": "KOCHI",
+      "district": "ERANAKULAM",
+      "latitude": 9.9399,
+      "longitude": 76.2602
+    },
+    {
+      "lac_code": "081",
+      "lac_name": "THRIPUNITHURA",
+      "district": "ERANAKULAM",
+      "latitude": 9.9496,
+      "longitude": 76.3445
+    },
+    {
+      "lac_code": "082",
+      "lac_name": "ERANAKULAM",
+      "district": "ERANAKULAM",
+      "latitude": 9.9816,
+      "longitude": 76.2999
+    },
+    {
+      "lac_code": "083",
+      "lac_name": "THRIKKAKARA",
+      "district": "ERANAKULAM",
+      "latitude": 10.032715,
+      "longitude": 76.331889
+    },
+    {
+      "lac_code": "084",
+      "lac_name": "KUNNATHUNAD (SC)",
+      "district": "ERANAKULAM",
+      "latitude": 10.1083,
+      "longitude": 76.4417
+    },
+    {
+      "lac_code": "085",
+      "lac_name": "PIRAVOM",
+      "district": "ERANAKULAM",
+      "latitude": 9.8734,
+      "longitude": 76.4923
+    },
+    {
+      "lac_code": "086",
+      "lac_name": "MUVATTUPUZHA",
+      "district": "ERANAKULAM",
+      "latitude": 9.99051,
+      "longitude": 76.57891
+    },
+    {
+      "lac_code": "087",
+      "lac_name": "KOTHAMANGALAM",
+      "district": "ERANAKULAM",
+      "latitude": 10.06019,
+      "longitude": 76.63508
+    },
+    {
+      "lac_code": "088",
+      "lac_name": "DEVIKULAM (SC)",
+      "district": "IDUKKI",
+      "latitude": 10.06264,
+      "longitude": 77.10399
+    },
+    {
+      "lac_code": "089",
+      "lac_name": "UDUMBANCHOLA",
+      "district": "IDUKKI",
+      "latitude": 9.899356,
+      "longitude": 77.18148
+    },
+    {
+      "lac_code": "090",
+      "lac_name": "THODUPUZHA",
+      "district": "IDUKKI",
+      "latitude": 9.8939,
+      "longitude": 76.7222
+    },
+    {
+      "lac_code": "091",
+      "lac_name": "IDUKKI",
+      "district": "IDUKKI",
+      "latitude": 9.85,
+      "longitude": 76.9667
+    },
+    {
+      "lac_code": "092",
+      "lac_name": "PEERUMADE",
+      "district": "IDUKKI",
+      "latitude": 9.577778,
+      "longitude": 77.020833
+    },
+    {
+      "lac_code": "093",
+      "lac_name": "PALA",
+      "district": "KOTTAYAM",
+      "latitude": 9.70838,
+      "longitude": 76.684914
+    },
+    {
+      "lac_code": "094",
+      "lac_name": "KADATHURUTHY",
+      "district": "KOTTAYAM",
+      "latitude": 9.7709041,
+      "longitude": 76.4800996
+    },
+    {
+      "lac_code": "095",
+      "lac_name": "VAIKOM (SC)",
+      "district": "KOTTAYAM",
+      "latitude": 9.7471,
+      "longitude": 76.3952
+    },
+    {
+      "lac_code": "096",
+      "lac_name": "ETTUMANOOR",
+      "district": "KOTTAYAM",
+      "latitude": 9.6704,
+      "longitude": 76.5609
+    },
+    {
+      "lac_code": "097",
+      "lac_name": "KOTTAYAM",
+      "district": "KOTTAYAM",
+      "latitude": 9.58692,
+      "longitude": 76.52132
+    },
+    {
+      "lac_code": "098",
+      "lac_name": "PUTHUPPALLY",
+      "district": "KOTTAYAM",
+      "latitude": 9.559433,
+      "longitude": 76.572217
+    },
+    {
+      "lac_code": "099",
+      "lac_name": "CHANGANASSERY",
+      "district": "KOTTAYAM",
+      "latitude": 9.4458875,
+      "longitude": 76.5409655
+    },
+    {
+      "lac_code": "100",
+      "lac_name": "KANJIRAPPALLY",
+      "district": "KOTTAYAM",
+      "latitude": 9.55727,
+      "longitude": 76.789436
+    },
+    {
+      "lac_code": "101",
+      "lac_name": "POONJAR",
+      "district": "KOTTAYAM",
+      "latitude": 9.6744,
+      "longitude": 76.8087
+    },
+    {
+      "lac_code": "102",
+      "lac_name": "AROOR",
+      "district": "ALAPPUZHA",
+      "latitude": 9.8694,
+      "longitude": 76.305
+    },
+    {
+      "lac_code": "103",
+      "lac_name": "CHERTHALA",
+      "district": "ALAPPUZHA",
+      "latitude": 9.68444,
+      "longitude": 76.33558
+    },
+    {
+      "lac_code": "104",
+      "lac_name": "ALAPPUZHA",
+      "district": "ALAPPUZHA",
+      "latitude": 9.4981,
+      "longitude": 76.3388
+    },
+    {
+      "lac_code": "105",
+      "lac_name": "AMBALAPUZHA",
+      "district": "ALAPPUZHA",
+      "latitude": 9.377914,
+      "longitude": 76.357391
+    },
+    {
+      "lac_code": "106",
+      "lac_name": "KUTTANAD",
+      "district": "ALAPPUZHA",
+      "latitude": 9.1536,
+      "longitude": 76.473
+    },
+    {
+      "lac_code": "107",
+      "lac_name": "HARIPAD",
+      "district": "ALAPPUZHA",
+      "latitude": 9.3,
+      "longitude": 76.4667
+    },
+    {
+      "lac_code": "108",
+      "lac_name": "KAYUMKULAM",
+      "district": "ALAPPUZHA",
+      "latitude": 9.182,
+      "longitude": 76.501
+    },
+    {
+      "lac_code": "109",
+      "lac_name": "MAVELIKARA (SC)",
+      "district": "ALAPPUZHA",
+      "latitude": 9.25929,
+      "longitude": 76.55642
+    },
+    {
+      "lac_code": "110",
+      "lac_name": "CHENGANNUR",
+      "district": "ALAPPUZHA",
+      "latitude": 9.31575,
+      "longitude": 76.6151
+    },
+    {
+      "lac_code": "111",
+      "lac_name": "THIRUVALLA",
+      "district": "PATHANAMTHITTA",
+      "latitude": 9.3835,
+      "longitude": 76.5741
+    },
+    {
+      "lac_code": "112",
+      "lac_name": "RANNI",
+      "district": "PATHANAMTHITTA",
+      "latitude": 9.3667,
+      "longitude": 76.81
+    },
+    {
+      "lac_code": "113",
+      "lac_name": "ARANMULA",
+      "district": "PATHANAMTHITTA",
+      "latitude": 9.3333,
+      "longitude": 76.6833
+    },
+    {
+      "lac_code": "114",
+      "lac_name": "KONNI",
+      "district": "PATHANAMTHITTA",
+      "latitude": 9.2246,
+      "longitude": 76.8476
+    },
+    {
+      "lac_code": "115",
+      "lac_name": "ADOOR (SC)",
+      "district": "PATHANAMTHITTA",
+      "latitude": 9.156651,
+      "longitude": 76.730766
+    },
+    {
+      "lac_code": "116",
+      "lac_name": "KARUNAGAPPALLY",
+      "district": "KOLLAM",
+      "latitude": 9.0544,
+      "longitude": 76.5353
+    },
+    {
+      "lac_code": "117",
+      "lac_name": "CHAVARA",
+      "district": "KOLLAM",
+      "latitude": 8.97578,
+      "longitude": 76.53513
+    },
+    {
+      "lac_code": "118",
+      "lac_name": "KUNNATHUR (SC)",
+      "district": "KOLLAM",
+      "latitude": 9.0438,
+      "longitude": 76.6715
+    },
+    {
+      "lac_code": "119",
+      "lac_name": "KOTTARAKKARA",
+      "district": "KOLLAM",
+      "latitude": 9.004,
+      "longitude": 76.774
+    },
+    {
+      "lac_code": "120",
+      "lac_name": "PATHANAPURAM",
+      "district": "KOLLAM",
+      "latitude": 9.09048,
+      "longitude": 76.89394
+    },
+    {
+      "lac_code": "121",
+      "lac_name": "PUNALOOR",
+      "district": "KOLLAM",
+      "latitude": 9.01956,
+      "longitude": 76.9226
+    },
+    {
+      "lac_code": "122",
+      "lac_name": "CHADAYAMANGALAM",
+      "district": "KOLLAM",
+      "latitude": 8.873124,
+      "longitude": 76.869394
+    },
+    {
+      "lac_code": "123",
+      "lac_name": "KUNDARA",
+      "district": "KOLLAM",
+      "latitude": 8.9601841,
+      "longitude": 76.6788091
+    },
+    {
+      "lac_code": "124",
+      "lac_name": "KOLLAM",
+      "district": "KOLLAM",
+      "latitude": 8.88113,
+      "longitude": 76.58469
+    },
+    {
+      "lac_code": "125",
+      "lac_name": "ERAVIPURAM",
+      "district": "KOLLAM",
+      "latitude": 8.86667,
+      "longitude": 76.61667
+    },
+    {
+      "lac_code": "126",
+      "lac_name": "CHATHANNOOR",
+      "district": "KOLLAM",
+      "latitude": 8.85667,
+      "longitude": 76.71806
+    },
+    {
+      "lac_code": "127",
+      "lac_name": "VARKALA",
+      "district": "TRIVANDRUM",
+      "latitude": 8.7333,
+      "longitude": 76.7167
+    },
+    {
+      "lac_code": "128",
+      "lac_name": "ATTINGAL (SC)",
+      "district": "TRIVANDRUM",
+      "latitude": 8.69609,
+      "longitude": 76.8151
+    },
+    {
+      "lac_code": "129",
+      "lac_name": "CHIRAYANKEEZHU (SC)",
+      "district": "TRIVANDRUM",
+      "latitude": 8.65587,
+      "longitude": 76.783174
+    },
+    {
+      "lac_code": "130",
+      "lac_name": "NEDUMANGAD",
+      "district": "TRIVANDRUM",
+      "latitude": 8.6033,
+      "longitude": 77.0028
+    },
+    {
+      "lac_code": "131",
+      "lac_name": "VAMANAPURAM",
+      "district": "TRIVANDRUM",
+      "latitude": 8.7200343,
+      "longitude": 76.8980371
+    },
+    {
+      "lac_code": "132",
+      "lac_name": "KAZHAKKOOTTAM",
+      "district": "TRIVANDRUM",
+      "latitude": 8.56556,
+      "longitude": 76.87472
+    },
+    {
+      "lac_code": "133",
+      "lac_name": "VATTIYOORKAVU",
+      "district": "TRIVANDRUM",
+      "latitude": 8.52385,
+      "longitude": 76.98707
+    },
+    {
+      "lac_code": "134",
+      "lac_name": "THIRUVANANTHAPURAM",
+      "district": "TRIVANDRUM",
+      "latitude": 8.5241,
+      "longitude": 76.9366
+    },
+    {
+      "lac_code": "135",
+      "lac_name": "NEMOM",
+      "district": "TRIVANDRUM",
+      "latitude": 8.457895,
+      "longitude": 76.999394
+    },
+    {
+      "lac_code": "136",
+      "lac_name": "ARUVIKKARA",
+      "district": "TRIVANDRUM",
+      "latitude": 8.567,
+      "longitude": 77.017
+    },
+    {
+      "lac_code": "137",
+      "lac_name": "PARASALA",
+      "district": "TRIVANDRUM",
+      "latitude": 8.3431,
+      "longitude": 77.1526
+    },
+    {
+      "lac_code": "138",
+      "lac_name": "KATTAKADA",
+      "district": "TRIVANDRUM",
+      "latitude": 8.5033,
+      "longitude": 77.0852
+    },
+    {
+      "lac_code": "139",
+      "lac_name": "KOVALAM",
+      "district": "TRIVANDRUM",
+      "latitude": 8.4004,
+      "longitude": 76.9787
+    },
+    {
+      "lac_code": "140",
+      "lac_name": "NEYYATTINKARA",
+      "district": "TRIVANDRUM",
+      "latitude": 8.3985,
+      "longitude": 77.0859
+    }
+  ],
+  "unassigned_coordinates": [
+    {
+      "page": 1,
+      "values": {
+        "latitude": [
+          11.65487,
+          11.258753,
+          11.6085
+        ],
+        "longitude": [
+          74.8876,
+          75.7,
+          75.8061,
+          75.6562
+        ]
+      },
+      "entries_missing_data": [
+        "001 (lng)",
+        "020 (lat)",
+        "021 (lat)",
+        "022 (lng)",
+        "023 (lng)",
+        "027 (lat)",
+        "029 (lng)"
+      ]
+    },
+    {
+      "page": 2,
+      "values": {
+        "latitude": [
+          11.3047
+        ],
+        "longitude": []
+      },
+      "entries_missing_data": [
+        "030 (lat)"
+      ]
+    },
+    {
+      "page": 4,
+      "values": {
+        "latitude": [
+          10.140487,
+          10.032715
+        ],
+        "longitude": []
+      },
+      "entries_missing_data": [
+        "078 (lat)",
+        "083 (lat)"
+      ]
+    },
+    {
+      "page": 5,
+      "values": {
+        "latitude": [
+          10.06264,
+          9.7709041,
+          9.4458875
+        ],
+        "longitude": []
+      },
+      "entries_missing_data": [
+        "088 (lat)",
+        "094 (lat)",
+        "099 (lat)"
+      ]
+    },
+    {
+      "page": 6,
+      "values": {
+        "latitude": [
+          8.9601841,
+          8.7200343
+        ],
+        "longitude": []
+      },
+      "entries_missing_data": [
+        "123 (lat)",
+        "131 (lat)"
+      ]
+    }
+  ]
+}

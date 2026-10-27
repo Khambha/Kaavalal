@@ -1,0 +1,87 @@
+.dashboard-ui.app{height:100vh;min-height:0;max-height:100vh;width:100vw;display:flex;flex-direction:column;overflow:hidden;background:var(--paper);color:var(--text);font-family:var(--font-body)}
+.dashboard-ui .navbar{min-height:60px;height:auto;flex:0 0 auto;flex-wrap:wrap;padding:8px 18px;gap:10px}
+.dashboard-ui .portal-nav{display:flex;align-items:center;justify-content:center;gap:6px;flex:1;flex-wrap:wrap}
+.dashboard-ui .portal-nav button{border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);color:#d9ece8;border-radius:7px;padding:7px 10px;font-size:11px;font-weight:700;white-space:nowrap}
+.dashboard-ui .portal-nav button:hover,.dashboard-ui .portal-nav button.active{background:rgba(154,213,200,.18);border-color:rgba(154,213,200,.45);color:#fff}
+.dashboard-ui .portal-nav button.portal-sos{background:#a83c35;border-color:#c76b62;color:#fff}
+.dashboard-ui .portal-nav button.portal-language{font-family:var(--font-ml);color:#a9d9cf}
+.dashboard-ui .system-status{flex:0 0 auto}
+.dashboard-ui .dashboard{flex:1;min-height:0}
+.dashboard-ui .citizen-view{min-height:0;flex:1;overflow-y:auto;background:var(--paper)}
+.dashboard-ui .citizen-view>.citizen-portal{min-height:100%;}
+.dashboard-ui .citizen-offline-banner{flex:0 0 auto;padding:7px 18px;font-size:11px}
+.dashboard-ui .footer{flex:0 0 auto}
+.dashboard-ui .shelter-pin{background:#197b67!important}
+
+/* Quiet motion polish: keep the existing palette and layout, and make state
+   changes feel deliberate without adding distracting animation. */
+.dashboard-ui {
+  --motion-ease: cubic-bezier(.2,.75,.25,1);
+  --motion-fast: 160ms;
+  --motion-normal: 220ms;
+}
+.dashboard-ui .portal-nav button,
+.dashboard-ui .district-item,
+.dashboard-ui .crumb,
+.dashboard-ui .segment,
+.dashboard-ui .switch-track,
+.dashboard-ui .switch-thumb,
+.dashboard-ui .explore-button,
+.dashboard-ui .popup-select-btn,
+.dashboard-ui .panel-back-btn,
+.dashboard-ui .lac-picker select,
+.dashboard-ui .district-search,
+.dashboard-ui .tile,
+.dashboard-ui .system-status,
+.dashboard-ui .leaflet-popup-content-wrapper {
+  transition: color var(--motion-fast) var(--motion-ease),
+    background-color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease),
+    opacity var(--motion-fast) var(--motion-ease);
+}
+.dashboard-ui .dashboard,
+.dashboard-ui .citizen-view {
+  animation: kaavalal-view-enter 200ms var(--motion-ease) both;
+}
+.dashboard-ui .district-item:hover:not(.selected) { transform: translateX(2px); }
+.dashboard-ui .tile:hover { border-color: var(--line); }
+.dashboard-ui .portal-nav button:active,
+.dashboard-ui .explore-button:active:not(:disabled),
+.dashboard-ui .popup-select-btn:active { transform: translateY(1px); }
+.dashboard-ui .system-status .status-dot { transition: background-color var(--motion-normal) var(--motion-ease); }
+.dashboard-ui .meter-fill { transition: width 420ms var(--motion-ease); }
+.dashboard-ui .leaflet-interactive { transition: fill .18s ease, stroke .18s ease, opacity .18s ease; }
+.dashboard-ui .leaflet-citizenPopups-pane { z-index: 800 !important; }
+.dashboard-ui .leaflet-citizenPopups-pane .leaflet-popup { z-index: 801 !important; pointer-events: auto; }
+.dashboard-ui .leaflet-citizenPopups-pane .leaflet-popup-content-wrapper { background: #fff; isolation: isolate; }
+.dashboard-ui .shelter-map-div-icon { background: transparent; border: 0; }
+.dashboard-ui .shelter-map-glyph { display: grid; width: 31px; height: 31px; place-items: center; border: 2px solid #fff; border-radius: 50% 50% 50% 12%; background: #197b67; box-shadow: 0 2px 8px rgba(15,42,51,.3); transform: rotate(-45deg); transition: transform 160ms var(--motion-ease), background-color 160ms ease, box-shadow 160ms ease; }
+.dashboard-ui .shelter-map-glyph svg { width: 18px; height: 18px; transform: rotate(45deg); }
+.dashboard-ui .shelter-map-glyph path { fill: none; stroke: #fff; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.dashboard-ui .leaflet-marker-icon:hover .shelter-map-glyph { background: #125b4b; box-shadow: 0 4px 12px rgba(15,42,51,.36); transform: rotate(-45deg) scale(1.08); }
+.dashboard-ui .shelter-popup-badge { background: #e4f3eb; color: #17654b; }
+.dashboard-ui .legend-pin.shelter-pin { position: relative; width: 13px; height: 13px; margin: 0 1px; border: 1px solid #fff; border-radius: 4px; box-shadow: 0 0 0 1px var(--line); }
+.dashboard-ui .legend-pin.shelter-pin::after { content: "⌂"; position: absolute; inset: -3px 0 0; display: grid; place-items: center; color: #fff; font-size: 10px; font-weight: 800; }
+.dashboard-ui :focus-visible { scroll-margin: 12px; }
+
+@keyframes kaavalal-view-enter {
+  from { opacity: .72; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-ui .dashboard,
+  .dashboard-ui .citizen-view { animation: none; }
+  .dashboard-ui .district-item:hover:not(.selected),
+  .dashboard-ui .portal-nav button:active,
+  .dashboard-ui .explore-button:active:not(:disabled),
+  .dashboard-ui .popup-select-btn:active { transform: none; }
+  .dashboard-ui .shelter-map-glyph,
+  .dashboard-ui .leaflet-marker-icon:hover .shelter-map-glyph { transition: none; transform: rotate(-45deg); }
+  .citizen-service-card:hover { transform: none; }
+}
+@media(max-width:850px){.dashboard-ui .navbar{justify-content:center}.dashboard-ui .brand{flex:1 1 100%;justify-content:center}.dashboard-ui .portal-nav{order:2;flex:1 1 100%}.dashboard-ui .system-status{order:1}.dashboard-ui .dashboard{flex:none}.dashboard-ui .footer{margin:12px 18px}}
+@media(max-width:1100px){.dashboard-ui.app{height:auto;min-height:100vh;max-height:none;overflow:visible}.dashboard-ui .citizen-view{overflow:visible}}
+@media(max-width:520px){.dashboard-ui .tagline{display:none}.dashboard-ui .portal-nav button{padding:7px 8px;font-size:10px}.dashboard-ui.app{height:auto;min-height:100vh;max-height:none;overflow:visible}.dashboard-ui .citizen-view{overflow:visible}.dashboard-ui .dashboard{grid-template-columns:1fr}.dashboard-ui .map-section{height:68vh;min-height:380px}}
