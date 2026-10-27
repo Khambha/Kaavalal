@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "./responder.css";
+import "./responder-shelters.css";
 
 const API_URL = "http://127.0.0.1:8000";
 
@@ -27,6 +28,10 @@ export default function ResponderFeed() {
   const [coverage, setCoverage] = useState([]);
   const [items, setItems] = useState([]);
   const [resources, setResources] = useState([]);
+  const [shelters, setShelters] = useState([]);
+  const [shelterRequests, setShelterRequests] = useState([]);
+  const [shelterChoices, setShelterChoices] = useState({});
+  const [emergencyShelterChoices, setEmergencyShelterChoices] = useState({});
   const [user, setUser] = useState(null);
   const [notes, setNotes] = useState({});
   const [resourceDrafts, setResourceDrafts] = useState({});
@@ -39,16 +44,20 @@ export default function ResponderFeed() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [profile, areas, feed, stock] = await Promise.all([
+      const [profile, areas, feed, stock, shelterList, shelterQueue] = await Promise.all([
         request("/api/auth/me"),
         request("/api/help-requests/responder/coverage"),
         request("/api/help-requests/responder/feed"),
         request("/api/responder/resources"),
+        request("/api/shelters/responder/all"),
+        request("/api/shelters/responder/requests"),
       ]);
       setUser(profile);
       setCoverage(areas);
       setItems(feed);
       setResources(stock);
+      setShelters(shelterList);
+      setShelterRequests(shelterQueue);
     } catch (err) {
       if (/token|credentials|authorized/i.test(err.message)) {
         localStorage.removeItem("token");
@@ -114,6 +123,36 @@ export default function ResponderFeed() {
     }
   }
 
+  async function shelterDecision(item, status) {
+    setBusyId(`shelter-${item.id}`);
+    try { await request(`/api/shelters/requests/${item.id}/decision`, { method: "POST", body: JSON.stringify({ status }) }); await load(); }
+    catch (err) { setError(err.message); }
+    finally { setBusyId(null); }
+  }
+
+  async function assignShelter(item) {
+    const shelter_id = Number(shelterChoices[item.id]);
+    if (!shelter_id) { setError("Choose an in-coverage shelter for this household."); return; }
+    setBusyId(`shelter-${item.id}`);
+    try { await request(`/api/shelters/requests/${item.id}/assign`, { method: "POST", body: JSON.stringify({ shelter_id }) }); await load(); }
+    catch (err) { setError(err.message); }
+    finally { setBusyId(null); }
+  }
+
+  async function adjustOccupancy(shelter, change) {
+    try { await request(`/api/shelters/${shelter.id}/occupancy?change=${change}`, { method: "POST" }); await load(); }
+    catch (err) { setError(err.message); }
+  }
+
+  async function assignEmergencyShelter(item) {
+    const shelter_id = Number(emergencyShelterChoices[item.id]);
+    if (!shelter_id) { setError("Choose an in-coverage shelter for this emergency."); return; }
+    setBusyId(item.id);
+    try { await request(`/api/shelters/help-requests/${item.id}/assign`, { method: "POST", body: JSON.stringify({ shelter_id }) }); await load(); }
+    catch (err) { setError(err.message); }
+    finally { setBusyId(null); }
+  }
+
   function signOut() {
     localStorage.removeItem("token");
     sessionStorage.removeItem("token");
@@ -145,6 +184,11 @@ export default function ResponderFeed() {
         </article>;
       })}</div>}
     </section>
+    <section className="responder-resources shelter-ops">
+      <div className="responder-feed-heading"><div><h2>Shelter requests</h2><p>Requests are routed by the preferred shelter’s LAC. Approve before assigning a bed.</p></div><span>{shelterRequests.filter(r=>r.status==="Pending").length} awaiting review</span></div>
+      {loading ? <p className="responder-empty">Loading shelter requests…</p> : !shelterRequests.length ? <p className="responder-empty">No shelter requests in your coverage areas.</p> : <div className="responder-cards">{shelterRequests.map(item=><article className="responder-card" key={`shelter-request-${item.id}`}><div className="responder-card-top"><div><span className="responder-loc">{item.lac} · {item.district}</span><h3>{item.household_name} · {item.people_count} people</h3></div><span className="responder-status">{item.status}</span></div><p>Preferred: <b>{item.preferred_shelter?.name}</b> · Contact {item.phone} · Aadhaar ending {item.aadhaar_last4}</p>{item.special_needs&&<p><b>Needs:</b> {item.special_needs}</p>}{item.assigned_shelter&&<p>Assigned to <b>{item.assigned_shelter.name}</b></p>}{item.status==="Pending"&&<div className="responder-card-footer"><button disabled={busyId===`shelter-${item.id}`} onClick={()=>shelterDecision(item,"Approved")}>Approve request</button><button className="shelter-reject" disabled={busyId===`shelter-${item.id}`} onClick={()=>shelterDecision(item,"Rejected")}>Reject</button></div>}{["Approved","Assigned"].includes(item.status)&&<div className="responder-card-footer"><select aria-label="Choose shelter in your jurisdiction" value={shelterChoices[item.id]||item.assigned_shelter?.id||""} onChange={e=>setShelterChoices(v=>({...v,[item.id]:e.target.value}))}><option value="">Choose an in-coverage shelter</option>{shelters.filter(s=>s.can_assign&&s.available+(s.id===item.assigned_shelter?.id?item.people_count:0)>=item.people_count).map(s=><option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.available} spaces</option>)}</select><button disabled={busyId===`shelter-${item.id}`} onClick={()=>assignShelter(item)}>{item.assigned_shelter?"Update assignment":"Assign shelter"}</button></div>}</article>)}</div>}
+    </section>
+    <section className="responder-resources shelter-ops"><div className="responder-feed-heading"><div><h2>Shelter directory</h2><p>All active shelters are visible. Occupancy can only be changed in your assigned areas.</p></div></div><div className="responder-resource-grid">{shelters.map(s=><article className="responder-resource-card" key={`shelter-${s.id}`}><div className="responder-card-top"><div><span className="responder-loc">{s.district} · {s.lac}</span><h3>{s.name}</h3></div><span className="responder-stock-count">{s.occupied}/{s.capacity}</span></div><p>{s.building_type} · {s.address}<br/>{s.available} spaces available</p>{s.can_assign?<div className="shelter-counter"><button disabled={s.occupied<=0} onClick={()=>adjustOccupancy(s,-1)} aria-label={`Remove one person from ${s.name}`}>−</button><span>Update headcount</span><button disabled={s.occupied>=s.capacity} onClick={()=>adjustOccupancy(s,1)} aria-label={`Add one person to ${s.name}`}>+</button></div>:<small>Outside your assigned jurisdiction</small>}</article>)}</div></section>
     <div className="responder-feed-heading"><div><h2>Help requests</h2><p>{items.length} request{items.length===1?"":"s"} in your area</p></div><button onClick={load}>Refresh</button></div>
     {loading ? <p className="responder-empty">Loading requests…</p> : !items.length ? <p className="responder-empty">There are no citizen requests in your coverage areas.</p> : <div className="responder-cards">{items.map(item=>{
       const owned = item.assigned_responder_id === user?.id;
@@ -154,6 +198,8 @@ export default function ResponderFeed() {
         <p>{item.situation_description}</p>
         <div className="responder-meta"><span>People affected: <b>{item.people_affected}</b></span><span>Location: <b>{item.location_description}</b></span><span>Submitted: <b>{new Date(item.created_at).toLocaleString()}</b></span></div>
         {item.special_assistance&&<p className="responder-assistance"><b>Special assistance:</b> {item.special_assistance}</p>}
+        {item.shelter_id&&<p className="responder-assistance"><b>Assigned shelter:</b> {shelters.find(s=>s.id===item.shelter_id)?.name||`Shelter #${item.shelter_id}`}</p>}
+        {owned&&!closed&&<div className="responder-card-footer emergency-shelter-assignment"><select aria-label="Assign this emergency to a shelter" value={emergencyShelterChoices[item.id]||item.shelter_id||""} onChange={e=>setEmergencyShelterChoices(v=>({...v,[item.id]:e.target.value}))}><option value="">Assign household to an in-coverage shelter</option>{shelters.filter(s=>s.can_assign&&s.available+(s.id===item.shelter_id?item.people_affected:0)>=item.people_affected).map(s=><option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.available} spaces</option>)}</select><button disabled={busyId===item.id} onClick={()=>assignEmergencyShelter(item)}>{item.shelter_id?"Change shelter":"Assign shelter"}</button></div>}
         {owned&&!closed&&<div className="responder-actions"><label>Response notes<textarea value={notes[item.id]??item.responder_notes??""} onChange={e=>setNotes(prev=>({...prev,[item.id]:e.target.value}))} placeholder="Add an update for the response team"/></label><label>Update status<select value={item.status} onChange={e=>update(item,e.target.value)} disabled={busyId===item.id}>{["Assigned","In Progress","Resolved","Rejected"].map(status=><option key={status}>{status}</option>)}</select></label></div>}
         {!closed&&<div className="responder-card-footer">{item.assigned_responder_id ? <span>{owned?"Assigned to you":"Already assigned to another responder"}</span> : <button disabled={busyId===item.id} onClick={()=>claim(item)}>{busyId===item.id?"Claiming…":"Claim request"}</button>}</div>}
       </article>;

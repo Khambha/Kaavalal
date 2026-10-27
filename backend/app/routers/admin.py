@@ -16,6 +16,7 @@ from app.models.user import User
 from app.models.responder_coverage import ResponderCoverage
 from app.models.resource_item import ResourceItem
 from app.models.resource_transaction import ResourceTransaction
+from app.services.request_tracking import record_status
 from app.routers.admin_auth import get_current_admin, password_hash, admin_public
 from app.routers.help_requests import get_lac_mapping, responder_coverage_query, validate_district_and_lac
 
@@ -161,6 +162,8 @@ def request_public(request: HelpRequest):
         "situation_description": request.situation_description,
         "image_path": request.image_path,
         "status": request.status,
+        "shelter_id": request.shelter_id,
+        "eta_estimate_minutes": request.eta_estimate_minutes,
         "assigned_responder_id": request.assigned_responder_id,
         "responder_notes": request.responder_notes,
         "created_at": request.created_at,
@@ -563,6 +566,8 @@ def update_request_status(request_id: int, data: RequestStatusUpdate, db: Sessio
     detail = f"{previous} -> {data.status}"
     if data.reason:
         detail += f"; reason: {data.reason.strip()}"
+    if previous != data.status:
+        record_status(db, help_request_id=request.id, status=data.status, actor_role="admin", note=data.reason or f"Administrator updated status to {data.status}.")
     log_action(db, admin, "help_request_status_changed", "help_request", request.id, detail)
     db.commit()
     db.refresh(request)
@@ -585,10 +590,13 @@ def assign_request(request_id: int, data: AssignmentUpdate, db: Session = Depend
         if request.status in {"Resolved", "Rejected"}:
             raise HTTPException(status_code=409, detail="A closed request cannot be assigned.")
     previous = request.assigned_responder_id
+    previous_status = request.status
     request.assigned_responder_id = data.responder_id
     if data.responder_id is not None:
         request.status = "Assigned"
     detail = f"responder {previous} -> {data.responder_id}"
+    if request.status != previous_status:
+        record_status(db, help_request_id=request.id, status=request.status, actor_role="admin", note="Administrator assigned a responder.")
     log_action(db, admin, "help_request_assigned", "help_request", request.id, detail)
     db.commit()
     db.refresh(request)

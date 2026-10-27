@@ -1,0 +1,36 @@
+.citizen-portal{max-width:1250px;margin:0 auto;padding:30px 24px 56px;color:#193d32}.citizen-welcome{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:24px}.citizen-welcome h1{font-size:30px;margin:4px 0}.citizen-welcome p{margin:0;color:#74847b}.citizen-kicker{font-size:10px;font-weight:800;letter-spacing:.15em;color:#49816a}.citizen-location{min-width:180px;padding:13px 16px;background:#eaf4ed;border-radius:12px;display:grid;gap:3px}.citizen-location span,.citizen-location small{font-size:11px;color:#718379}.citizen-location b{font-size:14px}.citizen-service-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.citizen-service-card{display:flex;align-items:center;gap:13px;text-align:left;padding:17px;background:#fff;border:1px solid #e0e9e2;border-radius:13px;color:#234638;box-shadow:0 4px 14px #153b2b08;transition:transform .15s,border-color .15s}.citizen-service-card:hover{transform:translateY(-2px);border-color:#91bca0}.citizen-service-icon{width:40px;height:40px;flex:none;display:grid;place-items:center;border-radius:11px;background:#edf5ef;color:#28724f;font-weight:900}.citizen-service-copy{display:grid;gap:4px;flex:1}.citizen-service-copy b{font-size:14px}.citizen-service-copy small{font-size:11px;line-height:1.45;color:#7b8981}.citizen-arrow{color:#699078;font-size:18px}.citizen-sos-card{border-color:#f0cbc4;background:#fffaf9}.citizen-sos-card .citizen-service-icon{background:#fff0ec;color:#b64b3f}.citizen-bottom-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;margin-top:18px}.citizen-panel{background:#fff;border:1px solid #e0e9e2;border-radius:13px;padding:19px;box-shadow:0 4px 14px #153b2b08}.citizen-panel h2{font-size:17px;margin:5px 0}.citizen-panel-head{display:flex;justify-content:space-between;align-items:center}.citizen-panel-head button,.citizen-back{border:1px solid #d4e1d7;background:white;color:#316749;border-radius:8px;padding:8px 11px;font-weight:700;font-size:12px}.citizen-alert-row{display:flex;gap:11px;padding:13px 0;border-top:1px solid #edf2ee}.citizen-alert-row b{font-size:13px}.citizen-alert-row p{font-size:11px;color:#73847a;line-height:1.45;margin:4px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.citizen-severity{align-self:flex-start;border-radius:999px;background:#edf2ed;color:#66766e;padding:5px 8px;font-size:9px;text-transform:uppercase;font-weight:800}.citizen-severity.warning,.citizen-severity.emergency{background:#fff0ec;color:#a34736}.citizen-severity.advisory{background:#fff4dd;color:#94691d}.citizen-severity.info{background:#eaf2fb;color:#3b6a9a}.citizen-muted{font-size:12px;line-height:1.5;color:#7c8b82}.citizen-assistant>p{font-size:12px;line-height:1.5;color:#73847a}.citizen-assistant form{display:flex;gap:7px}.citizen-assistant input{min-width:0;flex:1;padding:10px;border:1px solid #d6e1d9;border-radius:8px;font:inherit;font-size:12px}.citizen-assistant form button,.citizen-info-panel form button{border:0;border-radius:8px;padding:9px 13px;background:#17654b;color:white;font-weight:700}.citizen-chat-log{display:grid;gap:6px;max-height:130px;overflow:auto}.citizen-chat-message{max-width:90%;padding:8px 10px;border-radius:9px;background:#eff5f0;color:#4b6254;font-size:11px;line-height:1.45}.citizen-chat-message.citizen{justify-self:end;background:#e7f1fb}.citizen-chat-error{display:block;color:#a24337;margin:7px 0}.citizen-alert-list{display:grid;gap:12px}.citizen-alert-list article h2{margin:10px 0 5px}.citizen-alert-list article p{white-space:pre-wrap;line-height:1.6;color:#52675b}.citizen-alert-list article small{font-size:11px;color:#7e8c83}.citizen-back{margin-bottom:14px;cursor:pointer}.citizen-info-panel{max-width:760px}.citizen-info-panel form{display:grid;gap:9px}.citizen-info-panel label{font-size:12px;font-weight:700;color:#52675b}.citizen-info-panel textarea{border:1px solid #d6e1d9;border-radius:8px;padding:11px;font:inherit;font-size:13px;resize:vertical}.citizen-info-panel form button{justify-self:start}.citizen-guidance-answer{margin:18px 0;padding:14px;border-radius:10px;background:#eff6f0;border-left:3px solid #438363}.citizen-guidance-answer p{font-size:13px;line-height:1.65;color:#425b4c}@media(max-width:760px){.citizen-portal{padding:22px 14px}.citizen-welcome{align-items:flex-start;flex-direction:column}.citizen-service-grid,.citizen-bottom-grid{grid-template-columns:1fr}.citizen-service-card{padding:14px}}
+
+/* Match the dashboard's calm transitions and make keyboard/focus states clear. */
+.citizen-service-card,
+.citizen-panel,
+.citizen-location,
+.citizen-panel-head button,
+.citizen-back,
+.citizen-assistant input,
+.citizen-info-panel textarea,
+.citizen-assistant form button,
+.citizen-info-panel form button {
+  transition: transform 180ms cubic-bezier(.2,.75,.25,1),
+    border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease,
+    color 180ms ease;
+}
+.citizen-service-card { box-shadow: 0 3px 12px #153b2b08; }
+.citizen-service-card:hover { box-shadow: 0 9px 22px #153b2b12; }
+.citizen-service-card:active { transform: translateY(0); }
+.citizen-panel-head button:hover,
+.citizen-back:hover { background: #f4f8f4; border-color: #aac9b2; }
+.citizen-assistant input:focus-visible,
+.citizen-info-panel textarea:focus-visible { outline: 2px solid #438363; outline-offset: 2px; }
+.citizen-assistant form button:hover,
+.citizen-info-panel form button:hover { background: #235f48; }
+.citizen-assistant form button:active,
+.citizen-info-panel form button:active,
+.citizen-panel-head button:active,
+.citizen-back:active { transform: translateY(1px); }
+@media(prefers-reduced-motion:reduce){
+  .citizen-service-card,.citizen-panel,.citizen-location,.citizen-panel-head button,
+  .citizen-back,.citizen-assistant input,.citizen-info-panel textarea,
+  .citizen-assistant form button,.citizen-info-panel form button{transition:none}
+  .citizen-service-card:hover,.citizen-service-card:active,.citizen-assistant form button:active,
+  .citizen-info-panel form button:active,.citizen-panel-head button:active,.citizen-back:active{transform:none}
+}

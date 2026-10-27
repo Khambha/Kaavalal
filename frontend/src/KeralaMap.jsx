@@ -183,6 +183,7 @@ export default function KeralaMap({
   selectedLayer = "Overall Risk",
   showConstituencies = true,
   lacs = [],
+  shelters = [],
 }) {
   const [keralaGeoJSON, setKeralaGeoJSON] = useState(null);
   const [loadingMap, setLoadingMap] = useState(true);
@@ -423,7 +424,6 @@ export default function KeralaMap({
               {/* Main LAC CircleMarker */}
               <CircleMarker
                 center={[Number(lac.latitude), Number(lac.longitude)]}
-                pane="markerPane"
                 radius={isLacSelected ? 9 : 7}
                 pathOptions={{
                   color: isLacSelected ? "#0c4a6e" : "#ffffff",
@@ -493,6 +493,13 @@ export default function KeralaMap({
             </React.Fragment>
           );
         })}
+
+        {shelters.filter(s => Number.isFinite(Number(s.latitude)) && Number.isFinite(Number(s.longitude))).map(shelter => (
+            <CircleMarker key={`shelter-${shelter.id}`} center={[Number(shelter.latitude), Number(shelter.longitude)]} pane="markerPane" radius={9} pathOptions={{color:"#fff",weight:2,fillColor:"#7c3aed",fillOpacity:.95}} bubblingMouseEvents={false}>
+            <Tooltip direction="top" offset={[0,-5]}>{shelter.name} · {shelter.available} spaces</Tooltip>
+            <Popup><div className="lac-marker-popup"><span className="popup-badge">EMERGENCY SHELTER</span><h4>{shelter.name}</h4><div className="popup-row"><span>Building:</span><strong>{shelter.building_type}</strong></div><div className="popup-row"><span>Area:</span><strong>{shelter.lac}, {shelter.district}</strong></div><div className="popup-row"><span>Address:</span><strong>{shelter.address}</strong></div><div className="popup-row"><span>Capacity:</span><strong>{shelter.occupied}/{shelter.capacity} occupied</strong></div></div></Popup>
+          </CircleMarker>
+        ))}
       </MapContainer>
 
       {/* COMPACT MAP LEGEND */}

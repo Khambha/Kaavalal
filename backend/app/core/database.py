@@ -1,21 +1,41 @@
-import os
 
-from dotenv import load_dotenv
+from pathlib import Path
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-load_dotenv()
+from app.core.config import BASE_DIR, settings
 
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-if not DATABASE_URL:
-    raise RuntimeError(
-        "DATABASE_URL is missing. Check your backend .env file."
-    )
+# Read the database URL from backend/.env
+DATABASE_URL = settings.DATABASE_URL
+
+# Configure SSL when a CA certificate is supplied.
+connect_args = {}
+
+if settings.MYSQL_SSL_CA:
+    ca_path = Path(settings.MYSQL_SSL_CA)
+
+    # Relative certificate paths are resolved from the backend directory.
+    if not ca_path.is_absolute():
+        ca_path = BASE_DIR / ca_path
+
+    if not ca_path.is_file():
+        raise RuntimeError(
+            f"MySQL CA certificate not found: {ca_path}. "
+            "Check MYSQL_SSL_CA in your backend .env file."
+        )
+
+    connect_args["ssl"] = {
+        "ca": str(ca_path),
+    }
+
 
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
+    pool_recycle=1800,
+    connect_args=connect_args,
 )
 
 SessionLocal = sessionmaker(

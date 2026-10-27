@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout, { Icon, RoleToggle } from "./AuthLayout";
 import lacData from "../lac_locations.json";
@@ -22,12 +22,21 @@ const DISTRICTS = [
   "Kasaragod",
 ];
 
-const normalize = (value) =>
-  String(value || "")
+const DISTRICT_ALIASES = {
+  trivandrum: "thiruvananthapuram",
+  trichur: "thrissur",
+  eranakulam: "ernakulam",
+  wynad: "wayanad",
+};
+
+const normalize = (value) => {
+  const normalized = String(value || "")
     .trim()
     .toLowerCase()
     .replace(/\bdistrict\b/g, "")
     .replace(/[^a-z]/g, "");
+  return DISTRICT_ALIASES[normalized] || normalized;
+};
 
 function getDistrict(lac) {
   return (
@@ -128,6 +137,10 @@ export default function Signup() {
   const [role, setRole] = useState("citizen");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [districts, setDistricts] = useState(DISTRICTS);
+  const [districtRows, setDistrictRows] = useState([]);
+  const [lacOptions, setLacOptions] = useState([]);
+  const [lacLoading, setLacLoading] = useState(false);
 
   const [form, setForm] = useState({
     full_name: "",
@@ -150,6 +163,71 @@ export default function Signup() {
       }))
       .filter((lac) => lac._name && lac._district);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_URL}/api/districts`)
+      .then((response) => {
+        if (!response.ok) throw new Error("District directory unavailable");
+        return response.json();
+      })
+      .then((rows) => {
+        if (!active || !Array.isArray(rows) || rows.length === 0) return;
+        setDistrictRows(rows);
+        setDistricts(rows.map((district) => district.name));
+      })
+      .catch(() => { /* Keep the bundled district directory if the API is offline. */ });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!form.district) {
+      setLacOptions([]);
+      setLacLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    const selectedDistrict = normalize(form.district);
+    const fallbackOptions = allLacs
+      .filter((lac) => normalize(lac._district) === selectedDistrict)
+      .sort((a, b) => a._name.localeCompare(b._name));
+    const districtRow = districtRows.find(
+      (district) => normalize(district.name) === selectedDistrict
+    );
+
+    if (!districtRow?.id) {
+      setLacOptions(fallbackOptions);
+      setLacLoading(false);
+      return undefined;
+    }
+
+    setLacOptions([]);
+    setLacLoading(true);
+    fetch(`${API_URL}/api/districts/${districtRow.id}/lacs`)
+      .then((response) => {
+        if (!response.ok) throw new Error("LAC directory unavailable");
+        return response.json();
+      })
+      .then((rows) => {
+        if (!active) return;
+        const databaseOptions = (Array.isArray(rows) ? rows : []).map((lac, index) => ({
+          ...lac,
+          _name: String(lac.name || "").trim(),
+          _district: districtRow.name,
+          _code: lac.administrative_code || lac.id || `${lac.name}-${index}`,
+        })).filter((lac) => lac._name);
+        setLacOptions(databaseOptions.length ? databaseOptions : fallbackOptions);
+      })
+      .catch(() => {
+        if (active) setLacOptions(fallbackOptions);
+      })
+      .finally(() => {
+        if (active) setLacLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [form.district, districtRows, allLacs]);
 
   function update(event) {
     const { name, value } = event.target;
@@ -176,18 +254,6 @@ export default function Signup() {
 
     setError("");
   }
-
-  const lacOptions = useMemo(() => {
-    if (!form.district) return [];
-
-    const selectedDistrict = normalize(form.district);
-
-    return allLacs
-      .filter(
-        (lac) => normalize(lac._district) === selectedDistrict
-      )
-      .sort((a, b) => a._name.localeCompare(b._name));
-  }, [form.district, allLacs]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -390,7 +456,9 @@ export default function Signup() {
             <option value="">
               {!form.district
                 ? "Select district first"
-                : lacOptions.length > 0
+                : lacLoading
+                  ? "Loading LACs…"
+                  : lacOptions.length > 0
                   ? "Select Nearest LAC"
                   : "No LACs found for this district"}
             </option>
@@ -403,10 +471,9 @@ export default function Signup() {
           </select>
         </Field>
 
-        {form.district && lacOptions.length === 0 && (
+        {form.district && !lacLoading && lacOptions.length === 0 && (
           <p className="msg error">
-            No LAC records matched this district in the imported
-            dataset. Please check lac_locations.json.
+            No LAC records were returned for this district. Check the backend LAC directory.
           </p>
         )}
 

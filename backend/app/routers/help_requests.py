@@ -23,6 +23,8 @@ from app.core.database import get_db
 from app.models.help_request import HelpRequest
 from app.models.user import User
 from app.models.responder_coverage import ResponderCoverage
+from app.models.shelter import RequestStatusEvent
+from app.services.request_tracking import record_status, event_public
 from app.schemas.help_request import (
     HelpRequestCreate,
     HelpRequestResponse,
@@ -48,6 +50,18 @@ MAPPING_FILE = (
     / "src"
     / "lac_locations.json"
 )
+
+DISTRICT_NAME_ALIASES = {
+    "TRIVANDRUM": "THIRUVANANTHAPURAM",
+    "TRICHUR": "THRISSUR",
+    "ERANAKULAM": "ERNAKULAM",
+    "WYNAD": "WAYANAD",
+}
+
+
+def canonical_district_name(name: str) -> str:
+    cleaned = str(name or "").strip().upper()
+    return DISTRICT_NAME_ALIASES.get(cleaned, cleaned)
 
 UPLOAD_DIR = BASE_DIR / "uploads" / "help_requests"
 UPLOAD_DIR = BASE_DIR / "uploads" / "help_requests"
@@ -99,7 +113,7 @@ def get_lac_mapping():
             if not district or not lac_name:
                 continue
 
-            district = district.strip().upper()
+            district = canonical_district_name(district)
             lac_name = lac_name.strip()
 
             if district and lac_name:
@@ -300,6 +314,7 @@ async def create_help_request(
     situation_description: str = Form(...),
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
+    client_request_id: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -328,8 +343,23 @@ async def create_help_request(
         data.lac,
     )
 
+    if client_request_id and (len(client_request_id) > 36 or len(client_request_id) < 16):
+        raise HTTPException(status_code=422, detail="Invalid client request identifier.")
+    if client_request_id:
+        existing = db.query(HelpRequest).filter(HelpRequest.client_request_id == client_request_id).first()
+        if existing:
+            if existing.user_id != current_user.id:
+                raise HTTPException(status_code=409, detail="This request identifier is already in use.")
+            return existing
+
     saved_image = await save_image(image)
 
+    urgency_base = {"Critical": 15, "High": 30, "Medium": 60, "Low": 120}.get(data.urgency, 60)
+    active_in_area = db.query(HelpRequest).filter(
+        HelpRequest.district.ilike(actual_district), HelpRequest.lac.ilike(actual_lac),
+        HelpRequest.status.in_(["Submitted", "Under Review", "Assigned", "In Progress"]),
+    ).count()
+    estimate = min(360, urgency_base + max(0, active_in_area - 2) * 10)
     help_request = HelpRequest(
         user_id=current_user.id,
         district=actual_district,
@@ -344,10 +374,14 @@ async def create_help_request(
         situation_description=data.situation_description,
         image_path=saved_image,
         status="Submitted",
+        client_request_id=client_request_id,
+        eta_estimate_minutes=estimate,
     )
 
     try:
         db.add(help_request)
+        db.flush()
+        record_status(db, help_request_id=help_request.id, status="Submitted", actor_role="system", note="Request received and routed to the response team for this area.")
         db.commit()
         db.refresh(help_request)
     except Exception:
@@ -375,6 +409,19 @@ def get_my_requests(
         .order_by(HelpRequest.created_at.desc())
         .all()
     )
+
+
+@router.get("/my/{request_id}/history")
+def get_my_request_history(request_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    item = db.get(HelpRequest, request_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Help request not found.")
+    if item.user_id != current_user.id:
+        if current_user.role not in {"responder", "rescuer"}:
+            raise HTTPException(status_code=403, detail="You cannot access this request history.")
+        require_request_coverage(db, current_user, item)
+    events = db.query(RequestStatusEvent).filter(RequestStatusEvent.help_request_id == item.id).order_by(RequestStatusEvent.created_at.asc(), RequestStatusEvent.id.asc()).all()
+    return [event_public(event) for event in events]
 
 
 @router.get("/{request_id}", response_model=HelpRequestResponse)
@@ -502,6 +549,7 @@ def claim_request(
         raise HTTPException(status_code=409, detail="This request has already been claimed or assigned.")
     request.assigned_responder_id = current_user.id
     request.status = "Assigned"
+    record_status(db, help_request_id=request.id, status="Assigned", actor_role=current_user.role, note="A responder claimed this request.")
     db.commit()
     db.refresh(request)
     return request
@@ -539,8 +587,11 @@ def update_request_status(
     if help_request.assigned_responder_id != current_user.id:
         raise HTTPException(status_code=403, detail="Claim this request before updating it.")
 
+    previous_status = help_request.status
     help_request.status = status
     help_request.responder_notes = responder_notes
+    if status != previous_status:
+        record_status(db, help_request_id=help_request.id, status=status, actor_role=current_user.role, note=responder_notes or f"Request status updated to {status}.")
 
     db.commit()
     db.refresh(help_request)

@@ -56,6 +56,11 @@ class HelpRequest(Base):
         nullable=True,
     )
 
+    shelter_id = Column(Integer, ForeignKey("shelters.id"), nullable=True)
+
+    client_request_id = Column(String(36), nullable=True, unique=True, index=True)
+    eta_estimate_minutes = Column(Integer, nullable=True)
+
     responder_notes = Column(Text, nullable=True)
 
     created_at = Column(

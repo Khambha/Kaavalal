@@ -56,6 +56,8 @@ class HelpRequestResponse(BaseModel):
     status: str
 
     assigned_responder_id: Optional[int] = None
+    shelter_id: Optional[int] = None
+    eta_estimate_minutes: Optional[int] = None
     responder_notes: Optional[str] = None
 
     created_at: datetime

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import "./seekhelp.css";
+import { t, localeName } from "./services/i18n";
+import { queueOfflineRequest } from "./services/offlineQueue";
 
 const API_URL = "http://127.0.0.1:8000/api/help-requests";
 
@@ -50,8 +52,13 @@ function authConfig() {
   };
 }
 
-export default function SeekHelp() {
-  const [form, setForm] = useState(INITIAL_FORM);
+function initialForm(mode, lac) {
+  const form = { ...INITIAL_FORM, district: lac?.district || "", lac: lac?.name || "" };
+  return mode === "sos" ? { ...form, emergency_type: "Other", urgency: "Critical", situation_description: "SOS emergency: " } : form;
+}
+
+export default function SeekHelp({ mode = "help", language = "en", defaultLac = null }) {
+  const [form, setForm] = useState(() => initialForm(mode, defaultLac));
   const [districts, setDistricts] = useState([]);
   const [lacs, setLacs] = useState([]);
   const [requests, setRequests] = useState([]);
@@ -60,9 +67,21 @@ export default function SeekHelp() {
   const [fetchingLacs, setFetchingLacs] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [histories, setHistories] = useState({});
+
+  async function toggleHistory(requestId) {
+    if (histories[requestId]) { setHistories(v => ({ ...v, [requestId]: null })); return; }
+    try {
+      const response = await axios.get(`${API_URL}/my/${requestId}/history`, authConfig());
+      setHistories(v => ({ ...v, [requestId]: response.data || [] }));
+    } catch { setError("Unable to load request history. Please try again."); }
+  }
+
+  useEffect(() => { setForm(initialForm(mode, defaultLac)); setError(""); setSuccess(""); }, [mode, defaultLac?.id]);
 
   useEffect(() => {
     loadDistricts();
+    if (defaultLac?.district) loadLacs(defaultLac.district);
     loadRequests();
   }, []);
 
@@ -113,6 +132,28 @@ export default function SeekHelp() {
         setError("Please sign in to view your help requests.");
       }
     }
+  }
+
+  async function saveIncidentOffline() {
+    setError(""); setSuccess("");
+    if (!getToken()) { setError("Please sign in before submitting a help request."); return; }
+    if (!form.district || !form.lac || !form.location_description.trim() || !form.emergency_type || !form.urgency || !form.situation_description.trim() || form.situation_description.trim().length < 10) {
+      setError(language === "ml" ? "ഓഫ്‌ലൈൻ ആയി സൂക്ഷിക്കുന്നതിന് മുമ്പ് ആവശ്യമായ വിവരങ്ങൾ പൂരിപ്പിക്കുക." : "Complete the required fields before saving this request offline."); return;
+    }
+    const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const payload = { district: form.district, lac: form.lac, location_description: form.location_description,
+      emergency_type: form.emergency_type, people_affected: form.people_affected,
+      special_assistance: form.special_assistance.join(", "), urgency: form.urgency,
+      situation_description: form.situation_description, client_request_id: requestId };
+    if (form.latitude && form.longitude) { payload.latitude = form.latitude; payload.longitude = form.longitude; }
+    if (image) payload.image = image;
+    setLoading(true);
+    try {
+      await queueOfflineRequest({ id: requestId, type: "incident", payload, queued_at: new Date().toISOString() });
+      setSuccess(language === "ml" ? "അഭ്യർത്ഥന ഈ ഉപകരണത്തിൽ സൂക്ഷിച്ചു. കണക്ഷൻ ലഭിക്കുമ്പോൾ അയയ്ക്കും." : "Request saved on this device. It will sync when the connection returns.");
+      setForm(initialForm(mode, defaultLac)); setLacs(defaultLac?.district ? lacs : []); setImage(null);
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
   }
 
   function handleChange(event) {
@@ -234,6 +275,8 @@ export default function SeekHelp() {
     }
 
     setLoading(true);
+    const clientRequestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    let offlinePayload = null;
 
     try {
       const payload = new FormData();
@@ -252,6 +295,7 @@ export default function SeekHelp() {
         "situation_description",
         form.situation_description
       );
+      payload.append("client_request_id", clientRequestId);
 
       if (form.latitude && form.longitude) {
         payload.append("latitude", form.latitude);
@@ -262,13 +306,14 @@ export default function SeekHelp() {
         payload.append("image", image);
       }
 
-      await axios.post(API_URL + "/", payload, authConfig());
+      offlinePayload = Object.fromEntries(payload.entries());
+      const response = await axios.post(API_URL + "/", payload, authConfig());
 
-      setSuccess(
-        "Your help request has been submitted successfully."
-      );
+      setSuccess(language === "ml"
+        ? `HELP-${response.data.id} ആയി സ്വീകരിച്ചു. ${response.data.lac}, ${response.data.district} പ്രദേശത്തെ രക്ഷാസംഘത്തിന് കൈമാറി.${response.data.eta_estimate_minutes ? ` കണക്കാക്കിയ പ്രതികരണ സമയം ഏകദേശം ${response.data.eta_estimate_minutes} മിനിറ്റ്.` : ""} ഇത് ഏകദേശ കണക്കാണ്; ഉറപ്പല്ല.`
+        : `Acknowledged as HELP-${response.data.id}. Routed to the response team for ${response.data.lac}, ${response.data.district}.${response.data.eta_estimate_minutes ? ` Estimated response window: about ${response.data.eta_estimate_minutes} minutes.` : ""} This is an estimate, not a guarantee.`);
 
-      setForm(INITIAL_FORM);
+      setForm(initialForm(mode, defaultLac));
       setLacs([]);
       setImage(null);
 
@@ -280,6 +325,17 @@ export default function SeekHelp() {
 
       await loadRequests();
     } catch (err) {
+      if (!err.response && offlinePayload) {
+        try {
+          await queueOfflineRequest({ id: clientRequestId, type: "incident", payload: offlinePayload, queued_at: new Date().toISOString() });
+          setSuccess("Your request was saved on this device and will sync when the connection returns.");
+          setForm(initialForm(mode, defaultLac)); setLacs(defaultLac?.district ? lacs : []); setImage(null);
+          return;
+        } catch (queueError) {
+          setError(queueError.message || "Could not save this request offline. Keep this page open and try again when connected.");
+          return;
+        }
+      }
       const detail = err.response?.data?.detail;
 
       setError(
@@ -303,10 +359,9 @@ export default function SeekHelp() {
       <header className="seek-help-header">
         <div>
           <p className="seek-help-eyebrow">KAAVALAL EMERGENCY SERVICES</p>
-          <h1>Seek Help</h1>
+          <h1>{t(mode === "sos" ? "Emergency / SOS Response" : "Report an Incident", language)}</h1>
           <p>
-            Describe your situation so the response team can understand
-            what assistance you need.
+            {mode === "sos" ? (language === "ml" ? "നിങ്ങളുടെ പ്രദേശത്തെ രക്ഷാസംഘത്തിന് അടിയന്തര സഹായ അഭ്യർത്ഥന അയയ്ക്കുക." : "Send an urgent request to the rescue team covering your location.") : (language === "ml" ? "സംഭവവും ആവശ്യമായ സഹായവും പ്രാദേശിക രക്ഷാസംഘത്തെ അറിയിക്കുക." : "Describe the incident so the response team can understand what assistance is needed.")}
           </p>
         </div>
 
@@ -316,7 +371,7 @@ export default function SeekHelp() {
       </header>
 
       <div className="seek-help-notice">
-        <strong>Emergency notice</strong>
+        <strong>{t("Emergency notice",language)}</strong>
         <p>
           If you are in immediate danger, contact local emergency
           services directly. Submitting this form does not guarantee
@@ -338,12 +393,12 @@ export default function SeekHelp() {
 
       <form className="seek-help-form" onSubmit={handleSubmit}>
         <section className="seek-help-section">
-          <h2>01. Emergency Location</h2>
-          <p>Tell us where assistance is needed.</p>
+          <h2>{t("01. Emergency Location",language)}</h2>
+          <p>{t("Tell us where assistance is needed.",language)}</p>
 
           <div className="seek-help-grid">
             <label>
-              District <span>*</span>
+              {t("District",language)} <span>*</span>
 
               <select
                 name="district"
@@ -351,7 +406,7 @@ export default function SeekHelp() {
                 onChange={handleChange}
                 required
               >
-                <option value="">Select district</option>
+                <option value="">{t("Select district",language)}</option>
 
                 {districts.map((district) => (
                   <option key={district} value={district}>
@@ -362,7 +417,7 @@ export default function SeekHelp() {
             </label>
 
             <label>
-              Legislative Assembly Constituency (LAC) <span>*</span>
+              {t("Legislative Assembly Constituency (LAC)",language)} <span>*</span>
 
               <select
                 name="lac"
@@ -373,10 +428,10 @@ export default function SeekHelp() {
               >
                 <option value="">
                   {!form.district
-                    ? "Select a district first"
+                    ? (language === "ml" ? "ആദ്യം ജില്ല തിരഞ്ഞെടുക്കുക" : "Select a district first")
                     : fetchingLacs
-                    ? "Loading LACs..."
-                    : "Select LAC"}
+                    ? (language === "ml" ? "മണ്ഡലങ്ങൾ ലോഡ് ചെയ്യുന്നു…" : "Loading LACs...")
+                    : t("Select LAC",language)}
                 </option>
 
                 {lacs.map((lac) => (
@@ -388,7 +443,7 @@ export default function SeekHelp() {
             </label>
 
             <label className="full-width">
-              Locality, address, or landmark <span>*</span>
+              {t("Locality, address, or landmark",language)} <span>*</span>
 
               <input
                 name="location_description"
@@ -403,7 +458,7 @@ export default function SeekHelp() {
 
           <div className="seek-help-gps">
             <div>
-              <strong>Share your current location</strong>
+              <strong>{t("Share your current location",language)}</strong>
               <p>
                 Optional. Allow your browser to access your location.
               </p>
@@ -420,7 +475,7 @@ export default function SeekHelp() {
 
           <div className="seek-help-grid">
             <label>
-              Latitude
+              {t("Latitude",language)}
               <input
                 type="number"
                 step="any"
@@ -434,7 +489,7 @@ export default function SeekHelp() {
             </label>
 
             <label>
-              Longitude
+              {t("Longitude",language)}
               <input
                 type="number"
                 step="any"
@@ -450,12 +505,12 @@ export default function SeekHelp() {
         </section>
 
         <section className="seek-help-section">
-          <h2>02. Emergency Details</h2>
-          <p>Tell us what kind of help is required.</p>
+          <h2>02. {t("Emergency Details",language)}</h2>
+          <p>{t("Tell us what kind of help is required.",language)}</p>
 
           <div className="seek-help-grid">
             <label>
-              Emergency type <span>*</span>
+              {t("Emergency type",language)} <span>*</span>
 
               <select
                 name="emergency_type"
@@ -467,14 +522,14 @@ export default function SeekHelp() {
 
                 {EMERGENCY_TYPES.map((type) => (
                   <option key={type} value={type}>
-                    {type}
+                    {t(type,language)}
                   </option>
                 ))}
               </select>
             </label>
 
             <label>
-              Urgency level <span>*</span>
+              {t("Urgency level",language)} <span>*</span>
 
               <select
                 name="urgency"
@@ -484,14 +539,14 @@ export default function SeekHelp() {
               >
                 {URGENCY_LEVELS.map((level) => (
                   <option key={level} value={level}>
-                    {level}
+                    {t(level,language)}
                   </option>
                 ))}
               </select>
             </label>
 
             <label>
-              Number of people affected <span>*</span>
+              {t("Number of people affected",language)} <span>*</span>
 
               <input
                 type="number"
@@ -506,7 +561,7 @@ export default function SeekHelp() {
           </div>
 
           <fieldset className="seek-help-assistance">
-            <legend>Does anyone need special assistance?</legend>
+            <legend>{t("Does anyone need special assistance?",language)}</legend>
 
             {[
               "Children",
@@ -523,13 +578,13 @@ export default function SeekHelp() {
                   onChange={handleAssistanceChange}
                 />
 
-                {item}
+                {t(item,language)}
               </label>
             ))}
           </fieldset>
 
           <label className="description-label">
-            Describe your situation <span>*</span>
+            {t("Describe your situation",language)} <span>*</span>
 
             <textarea
               name="situation_description"
@@ -548,7 +603,7 @@ export default function SeekHelp() {
           </label>
 
           <label className="upload-area" htmlFor="help-image">
-            <strong>Upload an image (optional)</strong>
+            <strong>{t("Upload an image (optional)",language)}</strong>
             <span>JPEG, PNG, or WebP. Maximum size: 5 MB.</span>
 
             <input
@@ -580,17 +635,20 @@ export default function SeekHelp() {
             responsible for handling emergency requests.
           </p>
 
+          <p className="offline-storage-note">{language === "ml" ? "ഇന്റർനെറ്റ് കുറവാണെങ്കിൽ അഭ്യർത്ഥന ഉപകരണത്തിൽ സൂക്ഷിക്കാം. പങ്കിടുന്ന ഉപകരണത്തിൽ വ്യക്തിഗത വിവരങ്ങൾ സൂക്ഷിക്കുമ്പോൾ ശ്രദ്ധിക്കുക." : "On a weak connection, save the request on this device and sync it later. Avoid storing personal details on a shared device."}</p>
+
           <button type="submit" disabled={loading}>
-            {loading ? "Submitting..." : "Submit Help Request"}
+            {loading ? (language === "ml" ? "അയയ്ക്കുന്നു..." : "Submitting...") : t("Submit Help Request",language)}
           </button>
+          <button type="button" className="secondary-button" onClick={saveIncidentOffline} disabled={loading}>{language === "ml" ? "ഉപകരണത്തിൽ സൂക്ഷിക്കുക" : "Save on this device"}</button>
         </div>
       </form>
 
       <section className="my-help-requests">
         <div className="my-help-heading">
           <div>
-            <h2>My Help Requests</h2>
-            <p>Review the requests submitted through your account.</p>
+            <h2>{t("My Help Requests",language)}</h2>
+            <p>{t("Review the requests submitted through your account.",language)}</p>
           </div>
 
           <button
@@ -598,7 +656,7 @@ export default function SeekHelp() {
             className="secondary-button"
             onClick={loadRequests}
           >
-            Refresh
+            {t("Refresh",language)}
           </button>
         </div>
 
@@ -624,30 +682,32 @@ export default function SeekHelp() {
                       request.status
                     )}`}
                   >
-                    {request.status}
+                    {t(request.status,language)}
                   </span>
                 </div>
 
                 <p>
-                  <strong>Location:</strong>{" "}
+                    <strong>{t("Location:",language)}</strong>{" "}
                   {request.location_description}
                 </p>
 
+                <p><strong>{language === "ml" ? "സ്ഥിതി:" : "Status:"}</strong> {t(request.status,language)}{request.eta_estimate_minutes ? ` · ${language === "ml" ? "കണക്കാക്കിയ പ്രതികരണ സമയം" : "Estimated response window"}: ${request.eta_estimate_minutes} ${language === "ml" ? "മിനിറ്റ്" : "minutes"}` : ""}</p>
+
                 <p>
-                  <strong>District:</strong> {request.district}
+                  <strong>{t("District",language)}:</strong> {request.district}
                   {" · "}
                   <strong>LAC:</strong> {request.lac}
                 </p>
 
                 <p>
-                  <strong>Urgency:</strong> {request.urgency}
+                  <strong>{t("Urgency:",language)}</strong> {t(request.urgency,language)}
                 </p>
 
                 <p>{request.situation_description}</p>
 
                 {request.responder_notes && (
                   <p>
-                    <strong>Response team update:</strong>{" "}
+                    <strong>{t("Response team update:",language)}</strong>{" "}
                     {request.responder_notes}
                   </p>
                 )}
@@ -655,9 +715,11 @@ export default function SeekHelp() {
                 <small>
                   Submitted:{" "}
                   {request.created_at
-                    ? new Date(request.created_at).toLocaleString()
+                    ? new Date(request.created_at).toLocaleString(localeName(language))
                     : "Date unavailable"}
                 </small>
+                <button type="button" className="secondary-button" onClick={() => toggleHistory(request.id)}>{histories[request.id] ? t("Hide status history",language) : t("View status history",language)}</button>
+                {histories[request.id] && <ol className="request-status-history">{histories[request.id].map(item=><li key={item.id}><b>{t(item.status,language)}</b><span>{t(item.note,language)}</span><small>{new Date(item.created_at).toLocaleString(localeName(language))}</small></li>)}</ol>}
               </article>
             ))}
           </div>

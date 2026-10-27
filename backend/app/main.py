@@ -11,6 +11,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.alert import Alert
 from app.models.resource_item import ResourceItem
 from app.models.resource_transaction import ResourceTransaction
+from app.models.shelter import Shelter, ShelterRequest, RequestStatusEvent
 from app.routers.help_requests import router as help_requests_router
 
 from app.core.database import Base, engine
@@ -41,6 +42,8 @@ from app.routers.admin import router as admin_router
 from app.routers.admin_auth import router as admin_auth_router
 from app.routers.alerts import router as alerts_router
 from app.routers.responder_resources import router as responder_resources_router
+from app.routers.shelters import router as shelters_router, admin_router as admin_shelters_router
+from app.routers.citizen import router as citizen_router
 
 
 app = FastAPI(
@@ -81,6 +84,41 @@ if "ix_resource_items_district" not in resource_indexes:
     with engine.begin() as connection:
         connection.execute(text("CREATE INDEX ix_resource_items_district ON resource_items (district)"))
 
+# Add SOS-to-shelter linkage to existing local databases.
+help_request_columns = {column["name"] for column in inspect(engine).get_columns("help_requests")}
+if "shelter_id" not in help_request_columns:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE help_requests ADD COLUMN shelter_id INTEGER NULL"))
+help_request_columns = {column["name"] for column in inspect(engine).get_columns("help_requests")}
+with engine.begin() as connection:
+    if "client_request_id" not in help_request_columns:
+        connection.execute(text("ALTER TABLE help_requests ADD COLUMN client_request_id VARCHAR(36) NULL"))
+    if "eta_estimate_minutes" not in help_request_columns:
+        connection.execute(text("ALTER TABLE help_requests ADD COLUMN eta_estimate_minutes INTEGER NULL"))
+help_request_indexes = inspect(engine).get_indexes("help_requests")
+has_unique_client_request_index = any(
+    index.get("unique") and "client_request_id" in index.get("column_names", [])
+    for index in help_request_indexes
+)
+if not has_unique_client_request_index:
+    with engine.begin() as connection:
+        connection.execute(text("CREATE UNIQUE INDEX uq_help_requests_client_request_id ON help_requests (client_request_id)"))
+
+shelter_request_columns = {column["name"] for column in inspect(engine).get_columns("shelter_requests")}
+with engine.begin() as connection:
+    if "client_request_id" not in shelter_request_columns:
+        connection.execute(text("ALTER TABLE shelter_requests ADD COLUMN client_request_id VARCHAR(36) NULL"))
+    if "eta_estimate_minutes" not in shelter_request_columns:
+        connection.execute(text("ALTER TABLE shelter_requests ADD COLUMN eta_estimate_minutes INTEGER NULL"))
+shelter_request_indexes = inspect(engine).get_indexes("shelter_requests")
+has_unique_shelter_request_id = any(
+    index.get("unique") and "client_request_id" in index.get("column_names", [])
+    for index in shelter_request_indexes
+)
+if not has_unique_shelter_request_id:
+    with engine.begin() as connection:
+        connection.execute(text("CREATE UNIQUE INDEX uq_shelter_requests_client_request_id ON shelter_requests (client_request_id)"))
+
 
 # Register existing routers
 app.include_router(locations_router)
@@ -98,6 +136,9 @@ app.include_router(admin_router)
 app.include_router(admin_auth_router)
 app.include_router(alerts_router)
 app.include_router(responder_resources_router)
+app.include_router(shelters_router)
+app.include_router(admin_shelters_router)
+app.include_router(citizen_router)
 
 @app.get("/")
 def root():
