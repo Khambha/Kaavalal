@@ -1,0 +1,644 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Noto+Sans+Malayalam:wght@400;500;600;700;800&display=swap');
+
+.kaavalal-home {
+  min-height: 100vh;
+  background: #101011;
+  color: #f7f1eb;
+  font-family: 'DM Sans', 'Noto Sans Malayalam', sans-serif;
+}
+
+.kaavalal-home * {
+  box-sizing: border-box;
+}
+
+.kaavalal-home a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ADDED: visible keyboard focus */
+.kaavalal-home a:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+/* NAVBAR */
+
+.home-nav {
+  height: 86px;
+  padding: 0 7.5%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  background: #101011;
+  border-bottom: 1px solid #353335;
+  position: relative;
+  z-index: 5;
+}
+
+.home-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 26px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.brand-dot,
+.about-dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #f32643;
+  display: inline-block;
+}
+
+.home-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+
+.home-nav-links a {
+  position: relative;
+  padding: 10px 0;
+  color: #e2dfe0;
+  font-size: 15px;
+  transition: color 0.2s;
+}
+
+.home-nav-links a:hover,
+.home-nav-links a.active {
+  color: #ff3049;
+}
+
+.home-nav-links a.active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: #ff3049;
+}
+
+.get-started {
+  padding: 15px 23px;
+  background: #f32643;
+  border-radius: 7px;
+  color: white !important;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+.get-started span {
+  margin-left: 8px;
+  font-size: 18px;
+}
+
+.get-started:hover,
+.explore-button:hover {
+  background: #d91d36;
+}
+
+/* HERO */
+
+.home-hero {
+  min-height: 800px;
+  height: calc(100vh - 186px);
+  max-height: 950px;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 70px 7.8%;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Kerala-inspired background */
+
+.hero-background {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+
+  /* dark base shows on the left where the text sits */
+  background-color: #101011;
+
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(16, 16, 17, 1) 0%,
+      rgba(16, 16, 17, 0.98) 38%,
+      rgba(16, 16, 17, 0.55) 62%,
+      rgba(16, 16, 17, 0.12) 100%
+    ),
+    linear-gradient(
+      0deg,
+      rgba(16, 16, 17, 0.7),
+      transparent 40%
+    ),
+    linear-gradient(
+      rgba(16, 16, 17, 0.25),
+      rgba(16, 16, 17, 0.25)
+    ),
+    url("./assets/hero.png");
+
+  background-repeat: no-repeat;
+  background-size: auto, auto, auto, auto 100%;
+  background-position: center, center, center, right center;
+}
+
+/* HERO CONTENT */
+
+.hero-content {
+  max-width: 720px;
+  position: relative;
+  z-index: 1;
+  animation: homeFadeIn 0.8s ease-out;
+}
+
+.hero-label {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-bottom: 35px;
+  color: #bcb9bc;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+}
+
+.hero-label span {
+  display: inline-block;
+  width: 39px;
+  height: 2px;
+  background: #ff3049;
+}
+
+.hero-content h1 {
+  margin: 0;
+  font-size: clamp(58px, 6.1vw, 88px);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -4px;
+}
+
+.hero-content h1 span {
+  color: #ff3049;
+}
+
+.hero-content p {
+  max-width: 510px;
+  margin: 30px 0 38px;
+  color: #bcb6b5;
+  font-size: 19px;
+  line-height: 1.75;
+}
+
+.explore-button {
+  min-height: 61px;
+  padding: 0 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #f32643;
+  border-radius: 7px;
+  color: white !important;
+  font-size: 15px;
+  font-weight: 700;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+
+.explore-button:hover {
+  transform: translateY(-2px);
+}
+
+.explore-button span {
+  font-size: 20px;
+}
+
+/* FOOTER */
+
+.home-about {
+  min-height: 100px;
+  padding: 25px 7.8%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-top: 1px solid #353335;
+  background: #101011;
+}
+
+.home-about div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-about strong {
+  font-size: 18px;
+}
+
+.about-dot {
+  width: 12px;
+  height: 12px;
+}
+
+.home-about p {
+  color: #aaa7aa;
+  font-size: 12px;
+}
+
+/* ANIMATION */
+
+@keyframes homeFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* TABLET */
+
+@media (max-width: 1000px) {
+  .home-nav {
+    padding: 0 4%;
+    gap: 20px;
+  }
+
+  .home-nav-links {
+    gap: 20px;
+  }
+
+  .home-nav-links a {
+    font-size: 13px;
+  }
+
+  .home-brand {
+    font-size: 22px;
+  }
+
+  .home-hero {
+    padding: 60px 6%;
+  }
+
+  .hero-content h1 {
+    font-size: 68px;
+  }
+
+  .hero-content p {
+    font-size: 16px;
+  }
+}
+
+/* MOBILE */
+
+@media (max-width: 650px) {
+  .home-nav {
+    min-height: 75px;
+    height: auto;
+    padding: 17px 5%;
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+
+  .home-brand {
+    font-size: 21px;
+  }
+
+  .brand-dot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .get-started {
+    padding: 11px 13px;
+    font-size: 12px;
+  }
+
+  .home-nav-links {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .home-nav-links a {
+    font-size: 12px;
+  }
+
+  .home-hero {
+    min-height: 690px;
+    height: auto;
+    padding: 80px 6% 70px;
+    align-items: center;
+  }
+
+  .hero-background {
+    background-position: center, center, center, 65% center;
+    background-size: auto, auto, auto, auto 100%;
+
+    background-image:
+      linear-gradient(
+        90deg,
+        rgba(16, 16, 17, 0.92),
+        rgba(16, 16, 17, 0.6)
+      ),
+      linear-gradient(
+        0deg,
+        rgba(16, 16, 17, 0.7),
+        transparent 40%
+      ),
+      linear-gradient(
+        rgba(16, 16, 17, 0.25),
+        rgba(16, 16, 17, 0.25)
+      ),
+      url("./assets/hero.png");
+  }
+
+  .hero-label {
+    gap: 10px;
+    font-size: 9px;
+    letter-spacing: 1.2px;
+    margin-bottom: 28px;
+  }
+
+  .hero-label span {
+    width: 25px;
+  }
+
+  .hero-content h1 {
+    font-size: clamp(43px, 10vw, 62px);
+    letter-spacing: -2.5px;
+  }
+
+  .hero-content p {
+    margin: 24px 0 30px;
+    font-size: 15px;
+  }
+
+  .explore-button {
+    min-height: 53px;
+    padding: 0 20px;
+    font-size: 13px;
+  }
+
+  .home-about {
+    padding: 24px 6%;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .home-about p {
+    margin: 0;
+    line-height: 1.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-content {
+    animation: none;
+  }
+}
+
+/* ---------- LIVE WEATHER + EMERGENCY CONTACT SECTIONS ---------- */
+
+.kaavalal-home {
+  scroll-behavior: smooth;
+}
+
+.home-section {
+  padding: 80px 7.8%;
+  border-top: 1px solid #353335;
+  scroll-margin-top: 20px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-size: clamp(30px, 3.4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.weather-select {
+  min-height: 46px;
+  padding: 0 16px;
+  background: #1a1a1c;
+  color: #f7f1eb;
+  border: 1px solid #353335;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 15px;
+}
+
+.section-note {
+  color: #bcb6b5;
+  font-size: 16px;
+}
+
+.section-note.error {
+  color: #ff6b7e;
+}
+
+.weather-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 24px;
+  color: #f7f1eb;
+  font-size: 20px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.weather-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px;
+}
+
+.weather-card,
+.contact-card {
+  padding: 22px;
+  background: #1a1a1c;
+  border: 1px solid #353335;
+  border-radius: 10px;
+}
+
+.weather-card span {
+  display: block;
+  margin-bottom: 8px;
+  color: #aaa7aa;
+  font-size: 14px;
+}
+
+.weather-card strong {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.contact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.contact-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.contact-card:hover {
+  border-color: #f32643;
+  transform: translateY(-2px);
+}
+
+.contact-label {
+  color: #bcb9bc;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.contact-card strong {
+  color: #ff3049;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.contact-note {
+  color: #aaa7aa;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (max-width: 650px) {
+  .home-section {
+    padding: 56px 6%;
+  }
+}
+
+
+/* ---------- LOGIN / SIGN UP BUTTONS ---------- */
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-btn {
+  padding: 14px 22px;
+  border: 1px solid #4a474a;
+  border-radius: 7px;
+  color: #f7f1eb !important;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.login-btn:hover {
+  border-color: #ff3049;
+  color: #ff3049 !important;
+}
+
+@media (max-width: 650px) {
+  .nav-actions {
+    gap: 8px;
+  }
+
+  .login-btn {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+}
+
+
+/* ---------- LIVE WEATHER PANEL (district + constituency) ---------- */
+
+.weather-selects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.weather-panel {
+  padding: 28px;
+  background: #151517;
+  border: 1px solid #353335;
+  border-radius: 12px;
+}
+
+.weather-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.weather-panel-head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.live-chip {
+  padding: 4px 12px;
+  background: rgba(52, 199, 123, 0.15);
+  color: #4ade80;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.weather-source {
+  margin: 8px 0 22px;
+  color: #aaa7aa;
+  font-size: 14px;
+}
+
+.weather-card strong small {
+  color: #aaa7aa;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+@media (max-width: 650px) {
+  .weather-panel {
+    padding: 20px;
+  }
+
+  .weather-panel-head h3 {
+    font-size: 15px;
+  }
+}

@@ -4,7 +4,8 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
-
+from pathlib import Path
+from dotenv import load_dotenv
 import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -30,11 +31,17 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 password_hash = PasswordHash.recommended()
 bearer_scheme = HTTPBearer()
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+# Load environment variables from backend/.env
+ENV_FILE = BACKEND_DIR / ".env"
+load_dotenv(ENV_FILE)
+
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 
 if not SECRET_KEY:
     raise RuntimeError(
-        "JWT_SECRET_KEY is missing. Configure it in your backend environment."
+        f"JWT_SECRET_KEY is missing. Please check: {ENV_FILE}"
     )
 
 ALGORITHM = "HS256"
