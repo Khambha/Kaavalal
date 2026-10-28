@@ -45,12 +45,23 @@ from app.routers.responder_resources import router as responder_resources_router
 from app.routers.shelters import router as shelters_router, admin_router as admin_shelters_router
 from app.routers.citizen import router as citizen_router
 
+# Thunai chatbot tables and routes. Import models before create_all so the shared
+# Kaavalal database registers the chatbot's own tables alongside the app models.
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+import app.chatbot.models  # noqa: F401
+import app.chatbot.ref_models  # noqa: F401
+from app.chatbot.router import router as chatbot_router, limiter as chatbot_limiter
+
 
 app = FastAPI(
     title="Kaavalal API",
     description="Kerala Disaster Management and Resource Allocation Platform",
     version="1.0.0",
 )
+
+app.state.limiter = chatbot_limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # Allow requests from the local React frontend
@@ -139,6 +150,7 @@ app.include_router(responder_resources_router)
 app.include_router(shelters_router)
 app.include_router(admin_shelters_router)
 app.include_router(citizen_router)
+app.include_router(chatbot_router, prefix="/api")
 
 @app.get("/")
 def root():

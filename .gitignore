@@ -3,6 +3,7 @@
 backend/venv/
 venv/
 .venv/
+backend/chatbot_vectorstore/
 
 # Python cache
 

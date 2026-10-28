@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "./responder.css";
 import "./responder-shelters.css";
+import ChatWidget from "../components/chatbot/ChatWidget";
 
 const API_URL = "http://127.0.0.1:8000";
 
@@ -204,5 +205,6 @@ export default function ResponderFeed() {
         {!closed&&<div className="responder-card-footer">{item.assigned_responder_id ? <span>{owned?"Assigned to you":"Already assigned to another responder"}</span> : <button disabled={busyId===item.id} onClick={()=>claim(item)}>{busyId===item.id?"Claiming…":"Claim request"}</button>}</div>}
       </article>;
     })}</div>}
+    <ChatWidget district={coverage[0]?.district || null} page="responder" />
   </main>;
 }

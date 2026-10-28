@@ -11,6 +11,7 @@ import lacData from "./lac_locations.json";
 import SeekHelp from "./seekheelp";
 import ShelterRequests from "./pages/ShelterRequests";
 import CitizenPortal, { CitizenAlerts, CitizenInformation } from "./pages/CitizenPortal";
+import ChatWidget from "./components/chatbot/ChatWidget";
 import { t } from "./services/i18n";
 import { flushOfflineRequests, listOfflineRequests } from "./services/offlineQueue";
 import "./pages/citizen-portal.css";
@@ -866,9 +867,9 @@ function App() {
           )}
         </aside>
       </main> : <div className="citizen-view">
-        {activeView === "citizen" && <CitizenPortal selectedLac={selectedLac} language={language} onNavigate={setActiveView} />}
+        {activeView === "citizen" && <CitizenPortal selectedLac={selectedLac} selectedDistrict={selectedDistrict} language={language} onNavigate={setActiveView} />}
         {activeView === "alerts" && <CitizenAlerts language={language} onBack={() => setActiveView("citizen")} />}
-        {activeView === "information" && <CitizenInformation language={language} onBack={() => setActiveView("citizen")} />}
+        {activeView === "information" && <CitizenInformation selectedDistrict={selectedDistrict} language={language} onBack={() => setActiveView("citizen")} />}
         {(activeView === "help" || activeView === "sos") && <SeekHelp mode={activeView} language={language} defaultLac={selectedLac} />}
         {activeView === "shelter" && <ShelterRequests shelters={shelters} language={language} />}
       </div>}
@@ -877,6 +878,7 @@ function App() {
         <span>Some values are sample data and are not official measurements.</span>
         <span>Basemap: Esri World Light Gray</span>
       </footer>}
+      {!['citizen', 'information'].includes(activeView) && <ChatWidget district={selectedDistrict?.name || null} page={activeView} language={language} />}
     </div>
   );
 }
