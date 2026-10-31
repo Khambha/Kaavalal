@@ -40,6 +40,7 @@ class UserResponse(BaseModel):
     district: str | None = None
     nearest_lac: str | None = None
     status: str
+    is_available: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

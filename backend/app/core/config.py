@@ -1,11 +1,16 @@
 
 from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 # backend/ directory
 BASE_DIR = Path(__file__).resolve().parents[2]
+
+# Settings are also read directly with os.getenv() in several modules.
+# Load backend/.env into the process environment before those modules import.
+load_dotenv(BASE_DIR / ".env")
 
 
 class Settings(BaseSettings):

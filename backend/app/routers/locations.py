@@ -15,6 +15,57 @@ router = APIRouter(
     tags=["Districts"],
 )
 
+WMO_WEATHER_DESCRIPTIONS = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Fog",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    56: "Light freezing drizzle",
+    57: "Dense freezing drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    66: "Light freezing rain",
+    67: "Heavy freezing rain",
+    71: "Slight snowfall",
+    73: "Moderate snowfall",
+    75: "Heavy snowfall",
+    77: "Snow grains",
+    80: "Slight rain showers",
+    81: "Moderate rain showers",
+    82: "Heavy rain showers",
+    85: "Slight snow showers",
+    86: "Heavy snow showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm with slight hail",
+    99: "Thunderstorm with heavy hail",
+}
+
+
+def serialize_current_weather(current: dict):
+    weather_code = current.get("weather_code")
+    return {
+        "temperature": current.get("temperature_2m"),
+        "feels_like": current.get("apparent_temperature"),
+        "humidity": current.get("relative_humidity_2m"),
+        "pressure": current.get("pressure_msl"),
+        "cloudiness": current.get("cloud_cover"),
+        "visibility": current.get("visibility"),
+        "wind_speed": current.get("wind_speed_10m"),
+        "wind_direction": current.get("wind_direction_10m"),
+        "rainfall": current.get("precipitation"),
+        "rainfall_1h": current.get("precipitation"),
+        "weather_code": weather_code,
+        "weather_condition": WMO_WEATHER_DESCRIPTIONS.get(weather_code, "Conditions unavailable"),
+        "time": current.get("time"),
+        "source": "Open-Meteo",
+    }
+
 
 @router.get(
     "",
@@ -174,8 +225,9 @@ def fetch_open_meteo_current(lat: float, lng: float):
         "https://api.open-meteo.com/v1/forecast"
         f"?latitude={lat}"
         f"&longitude={lng}"
-        "&current=temperature_2m,relative_humidity_2m,"
-        "precipitation,wind_speed_10m"
+        "&current=temperature_2m,relative_humidity_2m,apparent_temperature,"
+        "pressure_msl,cloud_cover,visibility,weather_code,precipitation,"
+        "wind_speed_10m,wind_direction_10m"
         "&timezone=Asia%2FKolkata"
     )
     try:
@@ -234,12 +286,7 @@ def get_lac_weather(
         "lac": lac.name if lac else None,
         "latitude": lat,
         "longitude": lng,
-        "temperature": current.get("temperature_2m"),
-        "humidity": current.get("relative_humidity_2m"),
-        "rainfall": current.get("precipitation"),
-        "wind_speed": current.get("wind_speed_10m"),
-        "time": current.get("time"),
-        "source": "Open-Meteo",
+        **serialize_current_weather(current),
         "scope": "LAC coordinates",
     }
 
@@ -276,10 +323,6 @@ def get_district_weather(
     return {
         "district_id": district.id,
         "district": district.name,
-        "temperature": current.get("temperature_2m"),
-        "humidity": current.get("relative_humidity_2m"),
-        "rainfall": current.get("precipitation"),
-        "wind_speed": current.get("wind_speed_10m"),
-        "time": current.get("time"),
+        **serialize_current_weather(current),
     }
 

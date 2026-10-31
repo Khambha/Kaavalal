@@ -25,8 +25,13 @@ from app.schemas.auth import (
     UserResponse,
     TokenResponse,
 )
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+
+
+class AvailabilityUpdate(BaseModel):
+    is_available: bool
 
 password_hash = PasswordHash.recommended()
 bearer_scheme = HTTPBearer()
@@ -293,3 +298,17 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 def get_me(user: User = Depends(get_current_user)):
     return user
+
+
+@router.patch("/me/availability")
+def set_my_availability(
+    data: AvailabilityUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.role not in {"rescuer", "responder"}:
+        raise HTTPException(status_code=403, detail="Only responders can change availability.")
+    user.is_available = data.is_available
+    db.commit()
+    db.refresh(user)
+    return {"is_available": user.is_available}

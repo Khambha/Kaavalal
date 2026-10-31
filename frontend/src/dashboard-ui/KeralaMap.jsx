@@ -43,6 +43,7 @@ function getFeatureDistrictName(feature) {
 }
 
 const cleanDistrictName = (name) => String(name || "").replace(/\bdistrict\b/i, "").trim();
+const hasCoordinates = (item) => item.latitude != null && item.longitude != null && item.latitude !== "" && item.longitude !== "" && Number.isFinite(Number(item.latitude)) && Number.isFinite(Number(item.longitude));
 
 // Camera controller: whole state on first load, then district / constituency focus.
 function MapBoundsController({ geojson, selectedDistrict, selectedLac }) {
@@ -91,11 +92,14 @@ function MapBoundsController({ geojson, selectedDistrict, selectedLac }) {
       }
     };
 
-    // First paint always shows the whole state, whichever district is preselected.
+    // On first paint, focus a selected district (or constituency above) when
+    // the dashboard has a signed-in user's saved area.
     if (!initialFitDone.current) {
       initialFitDone.current = true;
-      fitAll(false);
-      return;
+      if (!selectedDistrict || selectedDistrict === "ALL") {
+        fitAll(false);
+        return;
+      }
     }
 
     if (!selectedDistrict || selectedDistrict === "ALL") {
@@ -130,6 +134,10 @@ export default function KeralaMap({
   showConstituencies = true,
   lacs = [],
   shelters = [],
+  showShelters = true,
+  helpRequests = [],
+  showHelpRequests = false,
+  onClaimHelpRequest,
 }) {
   const [keralaGeoJSON, setKeralaGeoJSON] = useState(null);
   const [loadingMap, setLoadingMap] = useState(true);
@@ -408,12 +416,39 @@ export default function KeralaMap({
 
         </Pane>
         <Pane name="shelterMarkers" style={{ zIndex: 630, pointerEvents: "auto" }}>
-        {shelters.filter(s => Number.isFinite(Number(s.latitude)) && Number.isFinite(Number(s.longitude))).map(shelter => (
+        {showShelters && shelters.filter(s => Number.isFinite(Number(s.latitude)) && Number.isFinite(Number(s.longitude))).map(shelter => (
           <Marker key={`shelter-${shelter.id}`} position={[Number(shelter.latitude), Number(shelter.longitude)]} pane="shelterMarkers" icon={shelterMapIcon} title={shelter.name}>
             <Tooltip direction="top" offset={[0, -5]}>{shelter.name} · {shelter.available} spaces</Tooltip>
             <Popup pane="citizenPopups"><div className="lac-marker-popup"><span className="popup-badge shelter-popup-badge">Emergency shelter</span><h4>{shelter.name}</h4><div className="popup-row"><span>Building</span><strong>{shelter.building_type}</strong></div><div className="popup-row"><span>Area</span><strong>{shelter.lac}, {shelter.district}</strong></div><div className="popup-row"><span>Address</span><strong>{shelter.address}</strong></div><div className="popup-row"><span>Capacity</span><strong>{shelter.occupied}/{shelter.capacity}</strong></div></div></Popup>
           </Marker>
         ))}
+        </Pane>
+        <Pane name="helpRequestMarkers" style={{ zIndex: 640, pointerEvents: "auto" }}>
+        {showHelpRequests && helpRequests
+          .filter(hasCoordinates)
+          .filter(item => !["Resolved", "Rejected"].includes(item.status))
+          .map(item => <CircleMarker
+            key={`help-request-${item.id}`}
+            center={[Number(item.latitude), Number(item.longitude)]}
+            radius={5}
+            pane="helpRequestMarkers"
+            pathOptions={{ color: "#ffffff", weight: 1.5, fillColor: "#d34438", fillOpacity: 0.95 }}
+          >
+            <Tooltip direction="top" offset={[0, -5]}>Request #{item.id} · {item.urgency}</Tooltip>
+            <Popup pane="citizenPopups" offset={[0, -5]}>
+              <div className="lac-marker-popup">
+                <span className="popup-badge people-popup-badge">Citizen request · {item.urgency}</span>
+                <h4>{item.emergency_type}</h4>
+                <div className="popup-row"><span>People affected</span><strong>{item.people_affected}</strong></div>
+                <div className="popup-row"><span>Status</span><strong>{item.status}</strong></div>
+                <div className="popup-row"><span>Area</span><strong>{item.lac}, {item.district}</strong></div>
+                <p className="people-popup-description">{item.situation_description}</p>
+                {!item.assigned_responder_id
+                  ? <button type="button" className="popup-select-btn" onClick={() => onClaimHelpRequest?.(item)}>Claim request</button>
+                  : <div className="popup-row"><span>Assignment</span><strong>Claimed by responder</strong></div>}
+              </div>
+            </Popup>
+          </CircleMarker>)}
         </Pane>
       </MapContainer>
 
@@ -439,7 +474,8 @@ export default function KeralaMap({
               <span className="legend-name">Constituency</span>
             </li>
           )}
-          {shelters.length > 0 && <li className="legend-pin-row"><span className="legend-pin shelter-pin" /><span className="legend-name">Shelter</span></li>}
+          {showShelters && shelters.length > 0 && <li className="legend-pin-row"><span className="legend-pin shelter-pin" /><span className="legend-name">Shelter</span></li>}
+          {showHelpRequests && <li className="legend-pin-row"><span className="legend-pin people-pin" /><span className="legend-name">Active citizen request</span></li>}
         </ul>
       </div>
     </div>

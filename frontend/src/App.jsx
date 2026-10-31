@@ -44,6 +44,39 @@ const initialDistricts = [
   { id: 1, name: "Thiruvananthapuram" },
 ];
 
+function formatObservationTime(value) {
+  if (!value) return null;
+  const numeric = typeof value === "number" || /^\d+$/.test(String(value));
+  const timestamp = numeric
+    ? Number(value) * (Number(value) < 1_000_000_000_000 ? 1000 : 1)
+    : value;
+  const localOpenMeteoTime = typeof timestamp === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(timestamp)
+    ? `${timestamp}+05:30`
+    : timestamp;
+  const date = new Date(localOpenMeteoTime);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function weatherGlyph(code) {
+  const value = Number(code);
+  if ([0, 1].includes(value)) return "☀️";
+  if ([2, 3].includes(value)) return "☁️";
+  if ([45, 48].includes(value)) return "🌫️";
+  if ((value >= 51 && value <= 67) || (value >= 80 && value <= 82)) return "🌧️";
+  if ((value >= 71 && value <= 77) || (value >= 85 && value <= 86)) return "❄️";
+  if (value >= 95 && value <= 99) return "⛈️";
+  return "🌤️";
+}
+
+function formatWeatherValue(value, digits = 1) {
+  return typeof value === "number" ? value.toFixed(digits) : value;
+}
+
 // Official geographical and demographic baseline statistics for all 14 districts
 const DISTRICT_DEFAULTS = {
   thiruvananthapuram: {
@@ -279,16 +312,26 @@ function App() {
     }
     async function savedArea() {
       const token = localStorage.getItem("token") || sessionStorage.getItem("token");
-      if (!token) return;
+      if (!token) return false;
       try {
         const response = await fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
-        if (!response.ok) return;
+        if (!response.ok) return false;
         const profile = await response.json();
-        applyLac(records.find(l => normalizeDistrictName(l.district) === normalizeDistrictName(profile.district) && normalizeDistrictName(l.lac_name) === normalizeDistrictName(profile.nearest_lac)));
-      } catch { /* Keep the dashboard's default location if the profile cannot be loaded. */ }
+        return applyLac(records.find(l => normalizeDistrictName(l.district) === normalizeDistrictName(profile.district) && normalizeDistrictName(l.lac_name) === normalizeDistrictName(profile.nearest_lac)));
+      } catch { return false; /* Keep the dashboard's default location if the profile cannot be loaded. */ }
     }
-    if (navigator.geolocation) navigator.geolocation.getCurrentPosition(position => { if (!applyLac(nearest(position.coords.latitude, position.coords.longitude))) savedArea(); }, savedArea, { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 });
-    else savedArea();
+    async function resolveStartupArea() {
+      // The account's saved constituency is the user's chosen dashboard area.
+      // Use device location only when no saved constituency is available.
+      if (await savedArea()) return;
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        position => applyLac(nearest(position.coords.latitude, position.coords.longitude)),
+        () => {},
+        { enableHighAccuracy: false, timeout: 7000, maximumAge: 300000 }
+      );
+    }
+    resolveStartupArea();
   }, []);
 
   // Load district directory from FastAPI
@@ -518,10 +561,14 @@ function App() {
   }
 
   const readings = [
-    { label: "Temperature", icon: "thermometer", value: weather?.temperature, unit: " °C" },
-    { label: "Humidity", icon: "droplet", value: weather?.humidity, unit: " %" },
-    { label: "Wind speed", icon: "wind", value: weather?.wind_speed, unit: " km/h" },
-    { label: liveWeather ? "Precipitation" : "Rainfall, 24 h", icon: "rain", value: rainfall?.rainfall_24h, unit: " mm" },
+    { label: "Temperature", icon: "thermometer", value: weather?.temperature, unit: " °C", digits: 1 },
+    { label: "Humidity", icon: "droplet", value: weather?.humidity, unit: " %", digits: 0 },
+    { label: "Feels Like", icon: "thermometer", value: weather?.feels_like, unit: " °C", digits: 1 },
+    { label: "Pressure", icon: "pressure", value: weather?.pressure, unit: " hPa", digits: 0 },
+    { label: "Cloud Cover", icon: "cloud", value: weather?.cloudiness, unit: " %", digits: 0 },
+    { label: "Visibility", icon: "eye", value: weather?.visibility == null ? null : weather.visibility / 1000, unit: " km", digits: 1 },
+    { label: "Wind Speed", icon: "wind", value: weather?.wind_speed, unit: " km/h", digits: 1 },
+    { label: "Rainfall (1h)", icon: "rain", value: liveWeather?.rainfall_1h ?? liveWeather?.rainfall ?? rainfall?.rainfall_24h, unit: " mm", digits: 2 },
   ];
   const hasReadings = readings.some((r) => r.value !== null && r.value !== undefined && r.value !== "");
 
@@ -764,10 +811,11 @@ function App() {
 
                 <section className="panel-section">
                   <div className="section-title">
-                    <h3>{selectedLac ? "Current conditions near LAC" : "Current conditions"}</h3>
-                    {weather?.time && <span className="live-chip">Live</span>}
+                    <h3>Current atmospheric conditions</h3>
+                    {liveWeather?.time && <span className="live-chip">Live</span>}
                   </div>
-                  {selectedLac && <p className="section-subtitle weather-source">{lacWeatherLoading ? "Loading LAC weather…" : liveWeather?.source ? `${liveWeather.source} · ${liveWeather.latitude?.toFixed?.(3)}, ${liveWeather.longitude?.toFixed?.(3)}` : "LAC weather is currently unavailable"}</p>}
+                  {weather?.weather_condition && <div className="weather-condition"><span className="weather-condition-icon" aria-hidden="true">{weatherGlyph(weather.weather_code)}</span><strong>{weather.weather_condition}</strong></div>}
+                  <p className="section-subtitle weather-source">{lacWeatherLoading ? "Loading current weather…" : liveWeather?.time ? `${liveWeather.source || "Open-Meteo"} observation · ${formatObservationTime(liveWeather.time)}` : selectedLac ? "LAC weather is currently unavailable" : weather?.recorded_at ? `Observation · ${formatObservationTime(weather.recorded_at)}` : "Current readings from Open-Meteo"}</p>
 
                   {!loading && !lacWeatherLoading && !hasReadings && (
                     <p className="panel-note is-inline">
@@ -787,7 +835,7 @@ function App() {
                             <span className="skeleton" />
                           ) : (
                             <strong className="tile-value">
-                              {empty ? "—" : r.value}
+                              {empty ? "—" : formatWeatherValue(r.value, r.digits)}
                               {!empty && <small>{r.unit}</small>}
                             </strong>
                           )}

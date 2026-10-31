@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, DateTime
 
 from app.core.database import Base
 
@@ -40,3 +40,5 @@ class User(Base):
     organization_id = Column(Integer, nullable=True)
 
     rescuer_id = Column(String(100), nullable=True)
+
+    is_available = Column(Boolean, nullable=False, default=False, server_default="0")

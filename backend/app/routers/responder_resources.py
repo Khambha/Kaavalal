@@ -94,3 +94,5 @@ def issue_resource(
     db.commit()
     db.refresh(item)
     return {"message": f"Issued {data.quantity} {item.unit} of {item.name} from {item.district} stock.", "item": resource_view(item)}
+
+

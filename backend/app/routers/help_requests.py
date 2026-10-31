@@ -196,18 +196,15 @@ def responder_coverage_query(db: Session, user: User):
 
 
 def request_is_in_coverage(db: Session, user: User, request: HelpRequest):
-    return any(
-        district.casefold() == request.district.casefold()
-        and lac.casefold() == request.lac.casefold()
-        for district, lac in responder_coverage_query(db, user)
-    )
+    covered_districts = {district.casefold() for district, _ in responder_coverage_query(db, user)}
+    return request.district.casefold() in covered_districts
 
 
 def require_request_coverage(db: Session, user: User, request: HelpRequest):
     if not request_is_in_coverage(db, user, request):
         raise HTTPException(
             status_code=403,
-            detail="This request is outside your assigned LAC coverage.",
+            detail="This request is outside your assigned district coverage.",
         )
 
 
@@ -503,10 +500,8 @@ def get_responder_feed(
     coverage = responder_coverage_query(db, current_user)
     if not coverage:
         return []
-    conditions = [
-        (HelpRequest.district.ilike(district) & HelpRequest.lac.ilike(lac))
-        for district, lac in coverage
-    ]
+    covered_districts = {district for district, _ in coverage}
+    conditions = [HelpRequest.district.ilike(district) for district in covered_districts]
     return (
         db.query(HelpRequest)
         .filter(or_(*conditions))
@@ -588,10 +583,16 @@ def update_request_status(
         raise HTTPException(status_code=403, detail="Claim this request before updating it.")
 
     previous_status = help_request.status
+    previous_notes = help_request.responder_notes
+    clean_notes = responder_notes.strip() if responder_notes and responder_notes.strip() else None
     help_request.status = status
-    help_request.responder_notes = responder_notes
-    if status != previous_status:
-        record_status(db, help_request_id=help_request.id, status=status, actor_role=current_user.role, note=responder_notes or f"Request status updated to {status}.")
+    help_request.responder_notes = clean_notes
+    if status != previous_status or clean_notes != previous_notes:
+        if clean_notes != previous_notes and status == previous_status:
+            event_note = clean_notes or "The response team cleared its previous note."
+        else:
+            event_note = clean_notes or f"Request status updated to {status}."
+        record_status(db, help_request_id=help_request.id, status=status, actor_role=current_user.role, note=event_note)
 
     db.commit()
     db.refresh(help_request)

@@ -85,6 +85,12 @@ app.add_middleware(
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Add responder availability to existing local user tables.
+user_columns = {column["name"] for column in inspect(engine).get_columns("users")}
+if "is_available" not in user_columns:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE users ADD COLUMN is_available BOOLEAN NOT NULL DEFAULT 0"))
+
 # Keep existing local installs working when district-wise inventory is added.
 resource_columns = {column["name"] for column in inspect(engine).get_columns("resource_items")}
 if "district" not in resource_columns:

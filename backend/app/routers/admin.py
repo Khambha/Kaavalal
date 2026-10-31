@@ -207,7 +207,14 @@ def dashboard(db: Session = Depends(get_db), admin: AdminUser = Depends(get_curr
         .outerjoin(AdminUser, AdminAuditLog.admin_user_id == AdminUser.id)
         .order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc()).limit(10).all())
     return {
-        "users": {"total": sum(role_counts.values()), "by_role": role_counts, "by_status": user_status_counts},
+        "users": {
+            "total": sum(role_counts.values()), "by_role": role_counts, "by_status": user_status_counts,
+            "available_responders": db.query(func.count(User.id)).filter(
+                User.role.in_(["rescuer", "responder"]),
+                User.status == "active",
+                User.is_available.is_(True),
+            ).scalar(),
+        },
         "administrators": {
             "total": db.query(func.count(AdminUser.id)).scalar(),
             "active": db.query(func.count(AdminUser.id)).filter(AdminUser.is_active.is_(True)).scalar(),
@@ -425,6 +432,7 @@ def list_users(
     return {"total": total, "limit": limit, "offset": offset, "users": [{
         "id": user.id, "full_name": user.full_name, "email": user.email, "role": user.role,
         "status": user.status, "district": user.district, "nearest_lac": user.nearest_lac,
+        "is_available": bool(user.is_available and user.status == "active" and user.role in {"rescuer", "responder"}),
         "organization_id": user.organization_id, "rescuer_id": user.rescuer_id,
         "coverage": [{"district": district, "lac": lac} for district, lac in responder_coverage_query(db, user)]
             if user.role in {"rescuer", "responder"} else [],
@@ -495,6 +503,8 @@ def update_user(user_id: int, data: UserUpdate, db: Session = Depends(get_db), a
         if user.status != data.status:
             changes.append(f"status {user.status} -> {data.status}")
             user.status = data.status
+    if user.status != "active" or user.role not in {"rescuer", "responder"}:
+        user.is_available = False
     if changes:
         log_action(db, admin, "user_updated", "user", user.id, "; ".join(changes))
         db.commit()
@@ -584,9 +594,9 @@ def assign_request(request_id: int, data: AssignmentUpdate, db: Session = Depend
         if not responder or responder.role not in {"rescuer", "responder"} or responder.status != "active":
             raise HTTPException(status_code=422, detail="Choose an active responder account.")
         responder_coverage = responder_coverage_query(db, responder)
-        if not any(district.casefold() == request.district.casefold() and lac.casefold() == request.lac.casefold()
-                   for district, lac in responder_coverage):
-            raise HTTPException(status_code=422, detail="The responder is not assigned to this request's LAC.")
+        if not any(district.casefold() == request.district.casefold()
+                   for district, _ in responder_coverage):
+            raise HTTPException(status_code=422, detail="The responder is not assigned to this request's district.")
         if request.status in {"Resolved", "Rejected"}:
             raise HTTPException(status_code=409, detail="A closed request cannot be assigned.")
     previous = request.assigned_responder_id

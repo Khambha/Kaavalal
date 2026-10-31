@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
+import { CircleMarker, MapContainer, TileLayer, Tooltip, useMapEvents } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 import "./seekhelp.css";
 import { t, localeName } from "./services/i18n";
 import { queueOfflineRequest } from "./services/offlineQueue";
@@ -20,6 +22,17 @@ const EMERGENCY_TYPES = [
 ];
 
 const URGENCY_LEVELS = ["Critical", "High", "Medium", "Low"];
+
+function SosPinMap({ latitude, longitude, onPick }) {
+  const map = useMapEvents({ click: event => onPick(event.latlng.lat, event.latlng.lng) });
+  const hasPin = latitude !== "" && longitude !== "" && Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude));
+
+  useEffect(() => {
+    if (hasPin) map.setView([Number(latitude), Number(longitude)], Math.max(map.getZoom(), 12), { animate: true });
+  }, [hasPin, latitude, longitude, map]);
+
+  return hasPin ? <CircleMarker center={[Number(latitude), Number(longitude)]} radius={7} pathOptions={{ color: "#fff", weight: 2, fillColor: "#d34438", fillOpacity: 1 }}><Tooltip permanent direction="top" offset={[0, -6]}>SOS location</Tooltip></CircleMarker> : null;
+}
 
 const INITIAL_FORM = {
   district: "",
@@ -68,6 +81,11 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [histories, setHistories] = useState({});
+  const [requestUpdates, setRequestUpdates] = useState([]);
+  const requestSnapshots = useRef(null);
+  const requestLoadInProgress = useRef(false);
+  const locationPickedByUser = useRef(false);
+  const [showLocationMap, setShowLocationMap] = useState(mode === "sos");
 
   async function toggleHistory(requestId) {
     if (histories[requestId]) { setHistories(v => ({ ...v, [requestId]: null })); return; }
@@ -77,12 +95,28 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
     } catch { setError("Unable to load request history. Please try again."); }
   }
 
-  useEffect(() => { setForm(initialForm(mode, defaultLac)); setError(""); setSuccess(""); }, [mode, defaultLac?.id]);
+  useEffect(() => {
+    setForm(initialForm(mode, defaultLac));
+    setError("");
+    setSuccess("");
+    locationPickedByUser.current = false;
+    setShowLocationMap(mode === "sos");
+    if (mode === "sos") detectLocation();
+  }, [mode, defaultLac?.id]);
 
   useEffect(() => {
     loadDistricts();
     if (defaultLac?.district) loadLacs(defaultLac.district);
-    loadRequests();
+    loadRequests({ notifyUpdates: false });
+    const refreshUpdates = () => {
+      if (document.visibilityState === "visible" && getToken()) loadRequests({ notifyUpdates: true });
+    };
+    const interval = window.setInterval(refreshUpdates, 20000);
+    window.addEventListener("focus", refreshUpdates);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshUpdates);
+    };
   }, []);
 
   async function loadDistricts() {
@@ -119,33 +153,84 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
     }
   }
 
-  async function loadRequests() {
+  async function loadRequests({ notifyUpdates = true } = {}) {
+    if (requestLoadInProgress.current) return;
+    requestLoadInProgress.current = true;
     try {
       const response = await axios.get(
         `${API_URL}/my`,
         authConfig()
       );
 
-      setRequests(response.data || []);
+      const nextRequests = response.data || [];
+      const previousById = requestSnapshots.current;
+      if (previousById && notifyUpdates) {
+        const changes = nextRequests.flatMap(request => {
+          const previous = previousById.get(request.id);
+          if (!previous) return [];
+          const statusChanged = previous.status !== request.status;
+          const noteChanged = (previous.responder_notes || "") !== (request.responder_notes || "");
+          if (!statusChanged && !noteChanged) return [];
+          return [{
+            id: `${request.id}-${request.updated_at || Date.now()}`,
+            requestId: request.id,
+            statusChanged,
+            noteChanged,
+            status: request.status,
+            note: request.responder_notes || "",
+          }];
+        });
+        if (changes.length) {
+          setRequestUpdates(current => [...changes, ...current].slice(0, 6));
+          setHistories(current => {
+            const next = { ...current };
+            changes.forEach(change => { if (next[change.requestId]) next[change.requestId] = null; });
+            return next;
+          });
+        }
+      }
+      requestSnapshots.current = new Map(nextRequests.map(request => [request.id, {
+        status: request.status,
+        responder_notes: request.responder_notes,
+      }]));
+      setRequests(nextRequests);
     } catch (err) {
       if (err.response?.status === 401) {
         setError("Please sign in to view your help requests.");
       }
+    } finally {
+      requestLoadInProgress.current = false;
     }
   }
 
   async function saveIncidentOffline() {
     setError(""); setSuccess("");
     if (!getToken()) { setError("Please sign in before submitting a help request."); return; }
-    if (!form.district || !form.lac || !form.location_description.trim() || !form.emergency_type || !form.urgency || !form.situation_description.trim() || form.situation_description.trim().length < 10) {
+    if (!form.district || !form.lac || (mode !== "sos" && !form.location_description.trim()) || !form.emergency_type || !form.urgency || !form.situation_description.trim() || form.situation_description.trim().length < 10) {
       setError(language === "ml" ? "ഓഫ്‌ലൈൻ ആയി സൂക്ഷിക്കുന്നതിന് മുമ്പ് ആവശ്യമായ വിവരങ്ങൾ പൂരിപ്പിക്കുക." : "Complete the required fields before saving this request offline."); return;
     }
     const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const payload = { district: form.district, lac: form.lac, location_description: form.location_description,
+    let offlineLatitude = form.latitude;
+    let offlineLongitude = form.longitude;
+    if (mode === "sos" && !offlineLatitude) {
+      try {
+        const deviceLocation = await getDeviceCoordinates();
+        offlineLatitude = deviceLocation.latitude;
+        offlineLongitude = deviceLocation.longitude;
+        setForm(previous => ({ ...previous, ...deviceLocation }));
+      } catch {
+        setShowLocationMap(true);
+        setError("SOS needs a location. Pin it on the map or allow device location before saving.");
+        return;
+      }
+    }
+    const effectiveLocationDescription = form.location_description.trim() || (mode === "sos" && offlineLatitude ? `SOS location ${offlineLatitude}, ${offlineLongitude}` : "");
+    if (!effectiveLocationDescription) { setError("Add a nearby landmark or pin the SOS location on the map."); return; }
+    const payload = { district: form.district, lac: form.lac, location_description: effectiveLocationDescription,
       emergency_type: form.emergency_type, people_affected: form.people_affected,
       special_assistance: form.special_assistance.join(", "), urgency: form.urgency,
       situation_description: form.situation_description, client_request_id: requestId };
-    if (form.latitude && form.longitude) { payload.latitude = form.latitude; payload.longitude = form.longitude; }
+    if (offlineLatitude && offlineLongitude) { payload.latitude = offlineLatitude; payload.longitude = offlineLongitude; }
     if (image) payload.image = image;
     setLoading(true);
     try {
@@ -158,6 +243,7 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
 
   function handleChange(event) {
     const { name, value } = event.target;
+    if (mode === "sos" && ["latitude", "longitude"].includes(name)) locationPickedByUser.current = true;
 
     if (name === "district") {
       setForm((previous) => ({
@@ -205,18 +291,21 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        if (locationPickedByUser.current) return;
         setForm((previous) => ({
           ...previous,
           latitude: position.coords.latitude.toFixed(6),
           longitude: position.coords.longitude.toFixed(6),
+          location_description: mode === "sos" && !previous.location_description.trim() ? "Current device location" : previous.location_description,
         }));
 
         setSuccess("Location detected successfully.");
       },
       () => {
-        setError(
-          "Unable to detect location. Please allow location access or enter it manually."
-        );
+        if (locationPickedByUser.current) return;
+        setError(mode === "sos"
+          ? "Unable to detect your device location. Pin the SOS location on the map or allow location access."
+          : "Unable to detect location. Please allow location access or enter it manually.");
       },
       {
         enableHighAccuracy: true,
@@ -224,6 +313,27 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
         maximumAge: 0,
       }
     );
+  }
+
+  function getDeviceCoordinates() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error("Device location is not supported by this browser."));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        position => resolve({ latitude: position.coords.latitude.toFixed(6), longitude: position.coords.longitude.toFixed(6) }),
+        reject,
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  }
+
+  function setPinnedLocation(latitude, longitude) {
+    locationPickedByUser.current = true;
+    setForm(previous => ({ ...previous, latitude: latitude.toFixed(6), longitude: longitude.toFixed(6), location_description: mode === "sos" && !previous.location_description.trim() ? "Pinned SOS map location" : previous.location_description }));
+    setError("");
+    setSuccess("SOS location pinned on the map.");
   }
 
   async function handleSubmit(event) {
@@ -242,20 +352,31 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
       return;
     }
 
-    if (
-      (form.latitude && !form.longitude) ||
-      (!form.latitude && form.longitude)
-    ) {
+    let latitude = form.latitude;
+    let longitude = form.longitude;
+    if ((latitude && !longitude) || (!latitude && longitude)) {
       setError("Please provide both GPS coordinates or leave both empty.");
       return;
     }
+    if (mode === "sos" && !latitude) {
+      try {
+        const deviceLocation = await getDeviceCoordinates();
+        latitude = deviceLocation.latitude;
+        longitude = deviceLocation.longitude;
+        setForm(previous => ({ ...previous, ...deviceLocation, location_description: previous.location_description.trim() ? previous.location_description : "Current device location" }));
+      } catch {
+        setError("SOS needs a location. Pin it on the map or allow device location before sending.");
+        setShowLocationMap(true);
+        return;
+      }
+    }
 
     if (
-      form.latitude &&
+      latitude &&
       (
-        Number(form.latitude) < -90 ||
-        Number(form.latitude) > 90 ||
-        !Number.isFinite(Number(form.latitude))
+        Number(latitude) < -90 ||
+        Number(latitude) > 90 ||
+        !Number.isFinite(Number(latitude))
       )
     ) {
       setError("Latitude must be between -90 and 90.");
@@ -263,11 +384,11 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
     }
 
     if (
-      form.longitude &&
+      longitude &&
       (
-        Number(form.longitude) < -180 ||
-        Number(form.longitude) > 180 ||
-        !Number.isFinite(Number(form.longitude))
+        Number(longitude) < -180 ||
+        Number(longitude) > 180 ||
+        !Number.isFinite(Number(longitude))
       )
     ) {
       setError("Longitude must be between -180 and 180.");
@@ -283,10 +404,13 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
 
       payload.append("district", form.district);
       payload.append("lac", form.lac);
-      payload.append(
-        "location_description",
-        form.location_description
-      );
+      const effectiveLocationDescription = form.location_description.trim() || (mode === "sos" && latitude ? `SOS location ${latitude}, ${longitude}` : "");
+      if (!effectiveLocationDescription) {
+        setError("Add a nearby landmark or pin the SOS location on the map.");
+        setLoading(false);
+        return;
+      }
+      payload.append("location_description", effectiveLocationDescription);
       payload.append("emergency_type", form.emergency_type);
       payload.append("people_affected", form.people_affected);
       payload.append("special_assistance", form.special_assistance.join(", "));
@@ -297,9 +421,9 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
       );
       payload.append("client_request_id", clientRequestId);
 
-      if (form.latitude && form.longitude) {
-        payload.append("latitude", form.latitude);
-        payload.append("longitude", form.longitude);
+      if (latitude && longitude) {
+        payload.append("latitude", latitude);
+        payload.append("longitude", longitude);
       }
 
       if (image) {
@@ -451,27 +575,34 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
                 onChange={handleChange}
                 placeholder="House name, street, village, or nearby landmark"
                 maxLength={500}
-                required
+                required={mode !== "sos"}
               />
             </label>
           </div>
 
           <div className="seek-help-gps">
             <div>
-              <strong>{t("Share your current location",language)}</strong>
-              <p>
-                Optional. Allow your browser to access your location.
-              </p>
+              <strong>{mode === "sos" ? "SOS location" : t("Share your current location",language)}</strong>
+              <p>{mode === "sos" ? "Pin the emergency on the map. If you do not pin it, SOS uses your device location." : "Optional. Allow your browser to access your location."}</p>
             </div>
 
             <button
               type="button"
               className="secondary-button"
-              onClick={detectLocation}
+              onClick={() => { locationPickedByUser.current = false; detectLocation(); }}
             >
-              Detect GPS Location
+              {mode === "sos" ? "Use device location" : "Detect GPS Location"}
             </button>
+            {mode === "sos" && <button type="button" className="secondary-button" onClick={() => setShowLocationMap(value => !value)}>{showLocationMap ? "Hide map" : "Pin on map"}</button>}
           </div>
+
+          {mode === "sos" && showLocationMap && <div className="sos-location-picker">
+            <p>Click the map to place the SOS location pin. Your coordinates are sent with the request.</p>
+            <MapContainer center={form.latitude && form.longitude ? [Number(form.latitude), Number(form.longitude)] : [10.5, 76.2]} zoom={form.latitude && form.longitude ? 12 : 7} scrollWheelZoom className="sos-pin-map">
+              <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; Esri' url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}" maxZoom={16} />
+              <SosPinMap latitude={form.latitude} longitude={form.longitude} onPick={setPinnedLocation} />
+            </MapContainer>
+          </div>}
 
           <div className="seek-help-grid">
             <label>
@@ -660,6 +791,11 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
           </button>
         </div>
 
+        {requestUpdates.length > 0 && <aside className="citizen-request-updates" role="status" aria-live="polite">
+          <div className="citizen-updates-heading"><div><strong>{language === "ml" ? "പുതിയ അഭ്യർത്ഥന അപ്‌ഡേറ്റുകൾ" : "New request updates"}</strong><span>{language === "ml" ? "രക്ഷാപ്രവർത്തകന്റെ സ്ഥിതിയും കുറിപ്പുകളും" : "Responder status and notes"}</span></div><button type="button" onClick={() => setRequestUpdates([])}>{language === "ml" ? "നീക്കുക" : "Clear"}</button></div>
+          <ul>{requestUpdates.map(update => <li key={update.id}><div><b>HELP-{update.requestId}</b>{update.statusChanged && <span>{language === "ml" ? "സ്ഥിതി:" : "Status:"} {t(update.status, language)}</span>}{update.noteChanged && <p><strong>{t("Response team update:", language)}</strong> {update.note || (language === "ml" ? "രക്ഷാപ്രവർത്തകന്റെ കുറിപ്പ് നീക്കി." : "The responder cleared the previous note.")}</p>}</div><button type="button" onClick={() => document.getElementById(`citizen-request-${update.requestId}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>{language === "ml" ? "കാണുക" : "View request"}</button></li>)}</ul>
+        </aside>}
+
         {requests.length === 0 ? (
           <div className="empty-requests">
             No help requests found.
@@ -667,7 +803,7 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
         ) : (
           <div className="help-request-list">
             {requests.map((request) => (
-              <article className="help-request-card" key={request.id}>
+              <article className="help-request-card" id={`citizen-request-${request.id}`} key={request.id}>
                 <div className="request-card-heading">
                   <div>
                     <span className="request-id">
