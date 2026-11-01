@@ -8,7 +8,11 @@ from app.models.weather import WeatherData
 from app.models.rainfall import RainfallData
 from app.models.hazard import HazardData
 from app.models.risk import RiskData
-from app.services.risk_calculator import calculate_baseline_risk
+from app.services.risk_calculator import (
+    REQUIRED_HAZARDS,
+    calculate_baseline_risk,
+    score_hazard_level,
+)
 from app.services.imd_mock_importer import import_imd_mock_data
 
 
@@ -34,6 +38,75 @@ def get_location_or_404(db: Session, location_id: int) -> Location:
         )
 
     return location
+
+
+def serialize_risk(risk: RiskData | None, hazards: HazardData | None = None):
+    """Return stored risk, or calculate the existing baseline from hazard labels."""
+    if risk is not None:
+        return {
+            "flood_risk": risk.flood_risk,
+            "landslide_risk": risk.landslide_risk,
+            "drought_risk": risk.drought_risk,
+            "overall_risk": risk.overall_risk,
+            "recorded_at": risk.recorded_at,
+            "score_type": "illustrative_baseline",
+        }
+
+    if hazards is None:
+        return None
+    scores = {
+        field: score_hazard_level(getattr(hazards, field))
+        for field in REQUIRED_HAZARDS
+    }
+    if any(value is None for value in scores.values()):
+        return None
+
+    flood = scores["flood_level"]
+    landslide = scores["landslide_level"]
+    drought = scores["drought_level"]
+    return {
+        "flood_risk": flood,
+        "landslide_risk": landslide,
+        "drought_risk": drought,
+        "overall_risk": round((flood + landslide + drought) / 3, 2),
+        "recorded_at": hazards.recorded_at,
+        "score_type": "illustrative_baseline",
+    }
+
+
+@router.get("/risk-map")
+def get_district_risk_map(db: Session = Depends(get_db)):
+    """Return stored or baseline-calculated district risk for map colouring."""
+    try:
+        districts = (
+            db.query(Location)
+            .filter(Location.location_type == "DISTRICT")
+            .order_by(Location.name)
+            .all()
+        )
+        results = []
+        for district in districts:
+            hazards = (
+                db.query(HazardData)
+                .filter(HazardData.location_id == district.id)
+                .order_by(HazardData.recorded_at.desc())
+                .first()
+            )
+            risk = (
+                db.query(RiskData)
+                .filter(RiskData.location_id == district.id)
+                .order_by(RiskData.recorded_at.desc())
+                .first()
+            )
+            results.append({
+                "district": district.name,
+                "risk": serialize_risk(risk, hazards),
+                "source": "stored_risk" if risk else "calculated_from_hazard_levels" if hazards else None,
+            })
+        return results
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Unable to retrieve district risk map data.")
 
 
 @router.get("/{location_id}")
@@ -73,6 +146,7 @@ def get_dashboard(
             .order_by(RiskData.recorded_at.desc())
             .first()
         )
+        risk_output = serialize_risk(risk, hazards)
 
         return {
             "location": {
@@ -117,21 +191,12 @@ def get_dashboard(
                 }
                 if hazards else None
             ),
-            "risk": (
-                {
-                    "flood_risk": risk.flood_risk,
-                    "landslide_risk": risk.landslide_risk,
-                    "drought_risk": risk.drought_risk,
-                    "overall_risk": risk.overall_risk,
-                    "recorded_at": risk.recorded_at,
-                }
-                if risk else None
-            ),
+            "risk": risk_output,
             "data_status": {
                 "weather_available": weather is not None,
                 "rainfall_available": rainfall is not None,
                 "hazards_available": hazards is not None,
-                "risk_available": risk is not None,
+                "risk_available": risk_output is not None,
                 "is_sample_data": True,
             },
         }

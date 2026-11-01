@@ -52,16 +52,18 @@ const DISTRICT_HAZARD_SCORES = {
   thiruvananthapuram: { overall: 45, flood: 52, landslide: 25, drought: 25, rainfall: 58 },
 };
 
-export function getDistrictLayerScore(districtName, layer) {
+export function getDistrictLayerScore(districtName, layer, riskByDistrict = {}) {
   const key = normalizeDistrictName(districtName);
-  const profile = DISTRICT_HAZARD_SCORES[key] || {
+  const live = riskByDistrict?.[key];
+  const sampleProfile = DISTRICT_HAZARD_SCORES[key];
+  const profile = live || sampleProfile || {
     overall: 45, flood: 45, landslide: 45, drought: 45, rainfall: 45,
   };
   switch (layer) {
-    case "Flood": return profile.flood;
-    case "Landslide": return profile.landslide;
-    case "Drought": return profile.drought;
-    case "Rainfall": return profile.rainfall;
-    default: return profile.overall;
+    case "Flood": return profile.flood_risk ?? profile.flood ?? sampleProfile?.flood ?? 45;
+    case "Landslide": return profile.landslide_risk ?? profile.landslide ?? sampleProfile?.landslide ?? 45;
+    case "Drought": return profile.drought_risk ?? profile.drought ?? sampleProfile?.drought ?? 45;
+    case "Rainfall": return profile.rainfall ?? sampleProfile?.rainfall ?? 45;
+    default: return profile.overall_risk ?? profile.overall ?? sampleProfile?.overall ?? 45;
   }
 }

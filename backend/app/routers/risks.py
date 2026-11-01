@@ -6,12 +6,33 @@ from app.core.database import get_db
 from app.models.location import Location
 from app.models.risk import RiskData
 from app.services.risk_calculator import calculate_baseline_risk
+from app.schemas.flood import FloodDemoPredictionRequest
+from app.services.flood_demo_model import predict_flood_demo
 
 
 router = APIRouter(
     prefix="/api/risk",
     tags=["Risk"],
 )
+
+
+@router.post("/flood/demo-predict")
+def predict_flood_for_demo(data: FloodDemoPredictionRequest):
+    """Return a clearly labeled synthetic demo score for one ~10 km grid cell."""
+    try:
+        prediction = predict_flood_demo(data.features.model_dump())
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    return {
+        "grid_id": data.grid_id,
+        "latitude": data.latitude,
+        "longitude": data.longitude,
+        "target": "flood_occurred_next_72h",
+        "demo_score_percent": prediction.pop("score_percent"),
+        "simulated": True,
+        "prediction": prediction,
+    }
 
 
 @router.get("/{location_id}")

@@ -1,0 +1,8 @@
+district,observation_date,inundated_area_ha,flood_observed,target_scope,label_status,source_url
+Alappuzha,2018-07-16,21799,1,district-satellite-snapshot,official_positive,https://sdma.kerala.gov.in/wp-content/uploads/2019/08/Memorandum1-Floods-2018.pdf
+Ernakulam,2018-07-16,2056,1,district-satellite-snapshot,official_positive,https://sdma.kerala.gov.in/wp-content/uploads/2019/08/Memorandum1-Floods-2018.pdf
+Kottayam,2018-07-16,12301,1,district-satellite-snapshot,official_positive,https://sdma.kerala.gov.in/wp-content/uploads/2019/08/Memorandum1-Floods-2018.pdf
+Pathanamthitta,2018-07-16,2322,1,district-satellite-snapshot,official_positive,https://sdma.kerala.gov.in/wp-content/uploads/2019/08/Memorandum1-Floods-2018.pdf
+Malappuram,2018-07-16,1338,1,district-satellite-snapshot,official_positive,https://sdma.kerala.gov.in/wp-content/uploads/2019/08/Memorandum1-Floods-2018.pdf
+Kollam,2018-07-16,1503,1,district-satellite-snapshot,official_positive,https://sdma.kerala.gov.in/wp-content/uploads/2019/08/Memorandum1-Floods-2018.pdf
+Thrissur,2018-07-16,13688,1,district-satellite-snapshot,official_positive,https://sdma.kerala.gov.in/wp-content/uploads/2019/08/Memorandum1-Floods-2018.pdf

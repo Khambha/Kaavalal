@@ -35,6 +35,7 @@ from app.routers.rainfall import router as rainfall_router
 from app.routers.hazards import router as hazards_router
 from app.routers.risks import router as risks_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.hazard_data import router as hazard_data_router
 
 # Authentication router
 from app.routers.auth import router as auth_router
@@ -145,6 +146,7 @@ app.include_router(rainfall_router)
 app.include_router(hazards_router)
 app.include_router(risks_router)
 app.include_router(dashboard_router)
+app.include_router(hazard_data_router)
 app.include_router(help_requests_router)
 
 # Register authentication routes

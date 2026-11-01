@@ -131,6 +131,7 @@ export default function KeralaMap({
   onSelectLac,
   districts = [],
   selectedLayer = "Overall Risk",
+  riskByDistrict = {},
   showConstituencies = true,
   lacs = [],
   shelters = [],
@@ -243,7 +244,8 @@ export default function KeralaMap({
     const isSelected =
       hasDistrictSelected &&
       normalizeDistrictName(currentDistName) === normalizeDistrictName(distName);
-    const band = getRiskBand(getDistrictLayerScore(distName, selectedLayer));
+
+    const band = getRiskBand(getDistrictLayerScore(distName, selectedLayer, riskByDistrict));
 
     // The risk colour is always kept; selection is shown by outline and emphasis.
     return {
@@ -316,7 +318,7 @@ export default function KeralaMap({
             style={districtStyle}
             onEachFeature={(feature, layer) => {
               const distName = getFeatureDistrictName(feature);
-              const score = getDistrictLayerScore(distName, selectedLayer);
+              const score = getDistrictLayerScore(distName, selectedLayer, riskByDistrict);
               const band = getRiskBand(score);
 
               layer.bindTooltip(
@@ -456,8 +458,8 @@ export default function KeralaMap({
       <div className="map-legend">
         <div className="legend-head">
           <span className="legend-title">{selectedLayer}</span>
-          <span className="legend-tag" title="District scores on the map are placeholder values, not official measurements.">
-            Sample scores
+          <span className="legend-tag" title="Where backend hazard inputs are missing, these are placeholder values, not official measurements.">
+            {Object.keys(riskByDistrict).length ? "Calculated + sample" : "Sample scores"}
           </span>
         </div>
         <ul className="legend-list">

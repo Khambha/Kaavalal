@@ -406,7 +406,7 @@ function App() {
     coastal_status: defaultInfo.coastal_status,
     population: defaultInfo.population,
     population_density: defaultInfo.population_density,
-    elevation_m: defaultInfo.elevation_m,
+    elevation_m: selectedLac ? (liveWeather?.elevation_m ?? null) : defaultInfo.elevation_m,
     area_sq_km: defaultInfo.area_sq_km,
   };
 
@@ -746,7 +746,7 @@ function App() {
                       </strong>
                     </div>
                     <div className="tile">
-                      <span className="tile-label">Elevation</span>
+                      <span className="tile-label">{selectedLac ? "Point elevation" : "Elevation"}</span>
                       <strong className="tile-value">
                         {location?.elevation_m ?? "—"}
                         <small> m</small>
@@ -760,6 +760,11 @@ function App() {
                       </strong>
                     </div>
                   </div>
+                  {selectedLac && (
+                    <p className="panel-note is-inline">
+                      Point elevation is estimated at the constituency coordinates from the Copernicus GLO-90 terrain model via Open-Meteo; it is not the constituency-wide average.
+                    </p>
+                  )}
                 </section>
               </>
             )}

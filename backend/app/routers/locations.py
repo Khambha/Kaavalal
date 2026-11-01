@@ -64,6 +64,8 @@ def serialize_current_weather(current: dict):
         "weather_condition": WMO_WEATHER_DESCRIPTIONS.get(weather_code, "Conditions unavailable"),
         "time": current.get("time"),
         "source": "Open-Meteo",
+        "elevation_m": current.get("elevation_m"),
+        "elevation_source": "Open-Meteo / Copernicus DEM GLO-90",
     }
 
 
@@ -239,6 +241,9 @@ def fetch_open_meteo_current(lat: float, lng: float):
     current = payload.get("current")
     if current is None:
         raise HTTPException(status_code=502, detail="Weather data is unavailable")
+    # Open-Meteo returns the requested coordinate's terrain elevation from its
+    # Copernicus DEM alongside the forecast/current payload.
+    current["elevation_m"] = payload.get("elevation")
     return current
 
 

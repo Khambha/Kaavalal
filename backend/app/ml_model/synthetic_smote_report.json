@@ -1,0 +1,42 @@
+{
+  "flood": {
+    "source_rows": 1260,
+    "train_rows_before_smote": 1008,
+    "untouched_holdout_rows": 252,
+    "class_counts_before_smote": {
+      "0": 466,
+      "1": 542
+    },
+    "class_counts_after_smote": {
+      "0": 466,
+      "1": 542
+    },
+    "smote_rows_added": 0,
+    "split_method": "constituency_group_holdout",
+    "warning": "Synthetic demo data only; these rows are not documented events or real observations."
+  },
+  "drought": {
+    "source_rows": 1260,
+    "train_rows_before_smote": 980,
+    "untouched_holdout_rows": 280,
+    "class_counts_before_smote": {
+      "0": 788,
+      "1": 192
+    },
+    "class_counts_after_smote": {
+      "0": 788,
+      "1": 788
+    },
+    "smote_rows_added": 596,
+    "split_method": "holdout_years_2025_2026",
+    "warning": "Synthetic demo data only; these rows are not documented events or real observations."
+  },
+  "landslide_skipped": {
+    "reason": "Current binary labels are synthetic-filled and strongly positive-skewed; SMOTE would fabricate unreliable negative examples.",
+    "class_counts": {
+      "0": 268,
+      "1": 5011
+    },
+    "smote_rows_added": 0
+  }
+}

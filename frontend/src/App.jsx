@@ -77,7 +77,9 @@ function formatWeatherValue(value, digits = 1) {
   return typeof value === "number" ? value.toFixed(digits) : value;
 }
 
-// Official geographical and demographic baseline statistics for all 14 districts
+// Census 2011 district totals from Kerala Ecostat, Statistical Handbook tables.
+// Elevation and area are district profile values, not Census indicators.
+// Source: https://ecostat.kerala.gov.in/storage/publications/109.pdf
 const DISTRICT_DEFAULTS = {
   thiruvananthapuram: {
     id: 1,
@@ -85,7 +87,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "COASTAL",
     population: 3301427,
+    male_population: 1581678,
+    female_population: 1719749,
     population_density: 1509,
+    sex_ratio: 1087,
+    literacy_rate: 92.66,
     elevation_m: 12,
     area_sq_km: 2189,
     hazard_levels: { flood_level: "MODERATE", landslide_level: "LOW", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "ACTIVE" },
@@ -97,7 +103,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "COASTAL",
     population: 2635375,
+    male_population: 1246968,
+    female_population: 1388407,
     population_density: 1061,
+    sex_ratio: 1113,
+    literacy_rate: 93.77,
     elevation_m: 15,
     area_sq_km: 2483,
     hazard_levels: { flood_level: "MODERATE", landslide_level: "LOW", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "ACTIVE" },
@@ -109,7 +119,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "INLAND",
     population: 1197412,
+    male_population: 561716,
+    female_population: 635696,
     population_density: 453,
+    sex_ratio: 1132,
+    literacy_rate: 96.93,
     elevation_m: 19,
     area_sq_km: 2642,
     hazard_levels: { flood_level: "HIGH", landslide_level: "MODERATE", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "INLAND" },
@@ -121,7 +135,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "COASTAL",
     population: 2127789,
+    male_population: 1013142,
+    female_population: 1114647,
     population_density: 1504,
+    sex_ratio: 1100,
+    literacy_rate: 96.26,
     elevation_m: 2,
     area_sq_km: 1414,
     hazard_levels: { flood_level: "VERY HIGH", landslide_level: "LOW", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "ACTIVE" },
@@ -133,7 +151,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "INLAND",
     population: 1974551,
+    male_population: 968289,
+    female_population: 1006262,
     population_density: 896,
+    sex_ratio: 1039,
+    literacy_rate: 96.40,
     elevation_m: 3,
     area_sq_km: 2206,
     hazard_levels: { flood_level: "HIGH", landslide_level: "LOW", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "INLAND" },
@@ -145,7 +167,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "INLAND",
     population: 1108974,
+    male_population: 552808,
+    female_population: 556166,
     population_density: 254,
+    sex_ratio: 1006,
+    literacy_rate: 92.20,
     elevation_m: 1200,
     area_sq_km: 4358,
     hazard_levels: { flood_level: "HIGH", landslide_level: "VERY HIGH", drought_level: "LOW", earthquake_level: "MODERATE", coastal_level: "INLAND" },
@@ -157,7 +183,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "COASTAL",
     population: 3282388,
+    male_population: 1619557,
+    female_population: 1662831,
     population_density: 1069,
+    sex_ratio: 1027,
+    literacy_rate: 95.68,
     elevation_m: 4,
     area_sq_km: 3068,
     hazard_levels: { flood_level: "HIGH", landslide_level: "LOW", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "ACTIVE" },
@@ -169,7 +199,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "COASTAL",
     population: 3121200,
+    male_population: 1480763,
+    female_population: 1640437,
     population_density: 1026,
+    sex_ratio: 1108,
+    literacy_rate: 95.32,
     elevation_m: 10,
     area_sq_km: 3032,
     hazard_levels: { flood_level: "HIGH", landslide_level: "LOW", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "ACTIVE" },
@@ -181,7 +215,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "INLAND",
     population: 2809934,
+    male_population: 1359478,
+    female_population: 1450456,
     population_density: 627,
+    sex_ratio: 1067,
+    literacy_rate: 88.49,
     elevation_m: 84,
     area_sq_km: 4480,
     hazard_levels: { flood_level: "LOW", landslide_level: "LOW", drought_level: "MODERATE", earthquake_level: "LOW", coastal_level: "INLAND" },
@@ -193,7 +231,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "COASTAL",
     population: 4112920,
+    male_population: 1960328,
+    female_population: 2152592,
     population_density: 1157,
+    sex_ratio: 1098,
+    literacy_rate: 93.55,
     elevation_m: 40,
     area_sq_km: 3554,
     hazard_levels: { flood_level: "MODERATE", landslide_level: "MODERATE", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "ACTIVE" },
@@ -205,7 +247,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "COASTAL",
     population: 3086293,
+    male_population: 1470942,
+    female_population: 1615351,
     population_density: 1316,
+    sex_ratio: 1098,
+    literacy_rate: 95.24,
     elevation_m: 1,
     area_sq_km: 2344,
     hazard_levels: { flood_level: "MODERATE", landslide_level: "MODERATE", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "ACTIVE" },
@@ -217,7 +263,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "INLAND",
     population: 817420,
+    male_population: 401684,
+    female_population: 415736,
     population_density: 383,
+    sex_ratio: 1035,
+    literacy_rate: 89.32,
     elevation_m: 700,
     area_sq_km: 2131,
     hazard_levels: { flood_level: "HIGH", landslide_level: "VERY HIGH", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "INLAND" },
@@ -229,7 +279,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "COASTAL",
     population: 2523003,
+    male_population: 1181446,
+    female_population: 1341557,
     population_density: 852,
+    sex_ratio: 1136,
+    literacy_rate: 95.41,
     elevation_m: 15,
     area_sq_km: 2966,
     hazard_levels: { flood_level: "MODERATE", landslide_level: "LOW", drought_level: "LOW", earthquake_level: "LOW", coastal_level: "ACTIVE" },
@@ -241,7 +295,11 @@ const DISTRICT_DEFAULTS = {
     location_type: "DISTRICT",
     coastal_status: "COASTAL",
     population: 1307375,
+    male_population: 628613,
+    female_population: 678762,
     population_density: 657,
+    sex_ratio: 1080,
+    literacy_rate: 89.85,
     elevation_m: 19,
     area_sq_km: 1992,
     hazard_levels: { flood_level: "MODERATE", landslide_level: "LOW", drought_level: "MODERATE", earthquake_level: "LOW", coastal_level: "ACTIVE" },
@@ -260,6 +318,7 @@ function App() {
   const [showConstituencies, setShowConstituencies] = useState(true);
 
   const [dashboard, setDashboard] = useState(null);
+  const [riskByDistrict, setRiskByDistrict] = useState({});
   const [liveWeather, setLiveWeather] = useState(null);
   const [lacWeatherLoading, setLacWeatherLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -357,6 +416,23 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    axios.get(`${API_URL}/api/dashboard/risk-map`)
+      .then((response) => {
+        if (!cancelled && Array.isArray(response.data)) {
+          const next = {};
+          response.data.forEach((entry) => {
+            if (!entry?.district || !entry?.risk) return;
+            next[normalizeDistrictName(entry.district)] = { ...entry.risk, source: entry.source };
+          });
+          setRiskByDistrict(next);
+        }
+      })
+      .catch(() => { /* Use labelled demo values if no calculated data is available. */ });
+    return () => { cancelled = true; };
+  }, [refreshKey]);
+
   // Load dashboard data for selected district
   useEffect(() => {
     if (!selectedDistrict || selectedDistrict === "ALL") {
@@ -373,7 +449,8 @@ function App() {
       setLoading(true);
 
       try {
-        const response = await axios.get(`${API_URL}/api/dashboard/${locationId}`);
+        const dashboardLocationId = selectedLac?.location_id || locationId;
+        const response = await axios.get(`${API_URL}/api/dashboard/${dashboardLocationId}`);
         if (!cancelled) {
           setDashboard(response.data);
           setApiOnline(true);
@@ -394,7 +471,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedDistrict, refreshKey]);
+  }, [selectedDistrict, selectedLac, refreshKey]);
 
   // Load live weather for the selected LAC centroid, or the district when no
   // constituency is selected. LACs use the same Open-Meteo backend provider.
@@ -456,6 +533,7 @@ function App() {
       .filter((item) => normalizeDistrictName(item.district) === targetNorm)
       .map((item) => ({
         id: Number(item.lac_code),
+        location_id: null,
         name: item.lac_name,
         administrative_code: item.lac_code,
         district: item.district,
@@ -480,6 +558,7 @@ function App() {
               );
               return {
                 ...bLac,
+                location_id: bLac.id,
                 district: distName,
                 latitude: bLac.latitude ?? matchedLocal?.latitude,
                 longitude: bLac.longitude ?? matchedLocal?.longitude,
@@ -504,6 +583,15 @@ function App() {
     };
   }, [selectedDistrict]);
 
+  useEffect(() => {
+    if (!selectedLac || selectedLac.location_id || !lacs.length) return;
+    const match = lacs.find((lac) =>
+      String(lac.administrative_code || "") === String(selectedLac.administrative_code || "") ||
+      lac.name?.toLowerCase() === selectedLac.name?.toLowerCase()
+    );
+    if (match?.location_id) setSelectedLac({ ...match, location_id: match.location_id });
+  }, [selectedLac, lacs]);
+
   // Filter district directory
   const filteredDistricts = useMemo(() => {
     return districts.filter((district) =>
@@ -520,22 +608,36 @@ function App() {
   const defaultInfo = DISTRICT_DEFAULTS[districtKey] || DISTRICT_DEFAULTS.palakkad;
 
   // Resolve telemetry values
-  const location = dashboard?.location || {
-    name: selectedDistrict?.name || defaultInfo.name,
-    location_type: "DISTRICT",
-    coastal_status: defaultInfo.coastal_status,
+  const location = {
+    ...(dashboard?.location || {}),
+    name: selectedLac?.name || dashboard?.location?.name || selectedDistrict?.name || defaultInfo.name,
+    location_type: dashboard?.location?.location_type || "DISTRICT",
+    coastal_status: dashboard?.location?.coastal_status ?? defaultInfo.coastal_status,
     population: defaultInfo.population,
+    male_population: defaultInfo.male_population,
+    female_population: defaultInfo.female_population,
     population_density: defaultInfo.population_density,
-    elevation_m: defaultInfo.elevation_m,
+    sex_ratio: defaultInfo.sex_ratio,
+    literacy_rate: defaultInfo.literacy_rate,
+    elevation_m: selectedLac ? (liveWeather?.elevation_m ?? null) : defaultInfo.elevation_m,
     area_sq_km: defaultInfo.area_sq_km,
   };
 
   const weather = selectedLac ? liveWeather : (liveWeather || dashboard?.weather);
   const rainfall = liveWeather ? { rainfall_24h: liveWeather.rainfall } : dashboard?.rainfall;
-  const risk = dashboard?.risk || null;
+  const districtName = selectedDistrict?.name || location?.name || "Palakkad";
+  const selectedDistrictRisk = riskByDistrict[districtKey] || null;
+  const demoRisk = {
+    flood_risk: getDistrictLayerScore(districtName, "Flood"),
+    landslide_risk: getDistrictLayerScore(districtName, "Landslide"),
+    drought_risk: getDistrictLayerScore(districtName, "Drought"),
+    overall_risk: getDistrictLayerScore(districtName, "Overall Risk"),
+    score_type: "sample_demo",
+  };
+  const risk = selectedDistrictRisk || dashboard?.risk || demoRisk;
+  const isDemoRisk = risk?.score_type === "sample_demo" || risk?.source === "sample_demo";
 
   const isStateView = selectedDistrict === "ALL";
-  const districtName = selectedDistrict?.name || location?.name || "Palakkad";
   const panelLabel = selectedLac
     ? "Assembly constituency"
     : isStateView
@@ -616,7 +718,7 @@ function App() {
             />
           </label>
 
-          <p className="sidebar-caption">Dot and score show {selectedLayer.toLowerCase()}.</p>
+          <p className="sidebar-caption">Dot and score show {selectedLayer.toLowerCase()}{Object.keys(riskByDistrict).length ? " · calculated where source hazard levels exist" : " · sample demo values"}.</p>
 
           <div className="district-list">
             {filteredDistricts.map((district) => {
@@ -626,7 +728,7 @@ function App() {
                 (selectedDistrict.id === district.id ||
                   normalizeDistrictName(selectedDistrict.name) ===
                     normalizeDistrictName(district.name));
-              const score = getDistrictLayerScore(district.name, selectedLayer);
+              const score = getDistrictLayerScore(district.name, selectedLayer, riskByDistrict);
               const band = getRiskBand(score);
 
               return (
@@ -731,6 +833,7 @@ function App() {
               onSelectLac={(lac) => setSelectedLac(lac)}
               districts={districts}
               selectedLayer={selectedLayer}
+              riskByDistrict={riskByDistrict}
               showConstituencies={showConstituencies}
               lacs={lacs}
               shelters={shelters}
@@ -848,7 +951,7 @@ function App() {
                 <section className="panel-section">
                   <div className="section-title">
                     <h3>{selectedLac ? "District disaster risk" : "Disaster risk"}</h3>
-                    <span className="section-subtitle">{selectedLac ? `${selectedDistrict?.name} district data` : risk ? "From API" : "Unavailable"}</span>
+                    <span className="section-subtitle">{selectedLac ? `${selectedDistrict?.name} district · ${isDemoRisk ? "sample scores" : "illustrative baseline"}` : isDemoRisk ? "Sample demo values" : "Illustrative baseline from hazard levels"}</span>
                   </div>
                   <div className="meter-list">
                     <RiskMeter label="Overall hazard" value={risk?.overall_risk ?? null} featured />
@@ -860,7 +963,7 @@ function App() {
 
                 <section className="panel-section">
                   <div className="section-title">
-                    <h3>{selectedLac ? "District population and terrain" : "Population and terrain"}</h3>
+                    <h3>{selectedLac ? `${selectedDistrict?.name} district Census 2011 and terrain` : "Census 2011 population and terrain"}</h3>
                   </div>
                   <div className="tile-grid">
                     <div className="tile">
@@ -879,7 +982,26 @@ function App() {
                       </strong>
                     </div>
                     <div className="tile">
-                      <span className="tile-label">Elevation</span>
+                      <span className="tile-label">Male population</span>
+                      <strong className="tile-value">{location?.male_population?.toLocaleString("en-IN") ?? "—"}</strong>
+                    </div>
+                    <div className="tile">
+                      <span className="tile-label">Female population</span>
+                      <strong className="tile-value">{location?.female_population?.toLocaleString("en-IN") ?? "—"}</strong>
+                    </div>
+                    <div className="tile">
+                      <span className="tile-label">Sex ratio (F/1,000 M)</span>
+                      <strong className="tile-value">{location?.sex_ratio ?? "—"}</strong>
+                    </div>
+                    <div className="tile">
+                      <span className="tile-label">Literacy</span>
+                      <strong className="tile-value">
+                        {location?.literacy_rate ?? "—"}
+                        <small>%</small>
+                      </strong>
+                    </div>
+                    <div className="tile">
+                      <span className="tile-label">{selectedLac ? "Point elevation" : "Elevation"}</span>
                       <strong className="tile-value">
                         {location?.elevation_m ?? "—"}
                         <small> m</small>
@@ -893,6 +1015,16 @@ function App() {
                       </strong>
                     </div>
                   </div>
+                  {selectedLac && (
+                    <p className="panel-note is-inline">
+                      Population and density are Census 2011 district totals for {selectedDistrict?.name}, shown as context for {selectedLac.name}. Point elevation is estimated at the constituency coordinates from the Copernicus GLO-90 terrain model via Open-Meteo; it is not the constituency-wide average. Census 2011 does not publish Assembly Constituency totals directly; a verified census-unit-to-constituency crosswalk is still needed. Area is a district profile value, not a Census field.
+                    </p>
+                  )}
+                  {!selectedLac && (
+                    <p className="panel-note is-inline">
+                      Population, density, sex ratio and literacy are Census of India 2011 district figures. Elevation and area are district profile values, not Census fields.
+                    </p>
+                  )}
                 </section>
               </>
             )}
