@@ -69,9 +69,9 @@ export async function flushOfflineRequests() {
         Object.entries(entry.payload).forEach(([key, value]) => {
           if (value !== null && value !== undefined && value !== "") body.append(key, value);
         });
-        response = await fetch("http://127.0.0.1:8000/api/help-requests/", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
+        response = await fetch(`${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/api/help-requests/`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body });
       } else if (entry.type === "shelter") {
-        response = await fetch("http://127.0.0.1:8000/api/shelters/requests", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(entry.payload) });
+        response = await fetch(`${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/api/shelters/requests`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(entry.payload) });
       } else continue;
       if (!response.ok) continue;
       const result = await response.json().catch(() => ({}));

@@ -7,7 +7,7 @@ import ChatWidget from "../components/chatbot/ChatWidget";
 import KeralaMap from "../dashboard-ui/KeralaMap";
 import "../dashboard-ui/dashboard.css";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 function getToken() {
   return localStorage.getItem("token") || sessionStorage.getItem("token");

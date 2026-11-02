@@ -6,7 +6,7 @@ import "./seekhelp.css";
 import { t, localeName } from "./services/i18n";
 import { queueOfflineRequest } from "./services/offlineQueue";
 
-const API_URL = "http://127.0.0.1:8000/api/help-requests";
+const API_URL = `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/api/help-requests`;
 
 const EMERGENCY_TYPES = [
   "Flood",

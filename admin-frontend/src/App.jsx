@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 
-const API = import.meta.env.VITE_PLATFORM_API_URL || "http://127.0.0.1:8000";
+const API = import.meta.env.VITE_PLATFORM_API_URL || import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const tokenKey = "kaavalal_admin_token";
 
 function formatApiError(detail, fallback) {

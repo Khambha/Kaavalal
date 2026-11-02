@@ -17,7 +17,7 @@ import { flushOfflineRequests, listOfflineRequests } from "./services/offlineQue
 import "./pages/citizen-portal.css";
 import "./pages/request-tracking.css";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const hazardLayers = [
   { name: "Overall Risk", description: "Combined overview of available district risk indicators." },

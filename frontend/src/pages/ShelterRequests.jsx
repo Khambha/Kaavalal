@@ -3,7 +3,7 @@ import "./shelter-requests.css";
 import { t, localeName } from "../services/i18n";
 import { queueOfflineRequest } from "../services/offlineQueue";
 
-const API = "http://127.0.0.1:8000/api/shelters";
+const API = `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/api/shelters`;
 const token = () => localStorage.getItem("access_token") || localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 
 export default function ShelterRequests({ shelters = [], language = "en" }) {

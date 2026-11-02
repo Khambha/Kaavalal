@@ -3,7 +3,7 @@ import "./citizen-portal.css";
 import { t, localeName } from "../services/i18n";
 import ChatWidget from "../components/chatbot/ChatWidget";
 
-const API = "http://127.0.0.1:8000";
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const services = [
   ["dashboard", "Citizen dashboard", "Weather, risk indicators, and local exposure information.", "▦"],
   ["help", "Report an incident", "Send a non-emergency incident report to your local response team.", "⌖"],

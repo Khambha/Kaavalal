@@ -2,7 +2,7 @@
 const BASE =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL) ||
   (typeof process !== "undefined" && process.env && process.env.REACT_APP_API_URL) ||
-  "http://127.0.0.1:8000";
+  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 // Reads your existing JWT so Thunai can show a logged-in citizen their own incident reports.
 // Change the storage key to whatever your Login module uses.

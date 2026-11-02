@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import AuthLayout, { Icon } from "./AuthLayout";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 export default function ResetPassword() {
   const token = new URLSearchParams(window.location.hash.slice(1)).get("token") || "";

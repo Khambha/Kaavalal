@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import AuthLayout, { Icon, RoleToggle } from "./AuthLayout";
 import lacData from "../lac_locations.json";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const DISTRICTS = [
   "Thiruvananthapuram",

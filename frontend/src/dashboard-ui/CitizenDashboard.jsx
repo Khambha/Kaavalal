@@ -7,7 +7,7 @@ import RiskMeter from "./RiskMeter";
 import { normalizeDistrictName, getDistrictLayerScore, getRiskBand } from "./riskScale";
 import lacData from "./lac_locations.json";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const hazardLayers = [
   { name: "Overall Risk", description: "Combined overview of available district risk indicators." },
