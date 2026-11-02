@@ -76,6 +76,7 @@ app.add_middleware(
         "http://localhost:5175",
         "http://127.0.0.1:5175",
         os.getenv("ADMIN_APP_ORIGIN"),
+        *[origin.strip() for origin in os.getenv("FRONTEND_ORIGINS", "").split(",")],
     ])),
     allow_credentials=True,
     allow_methods=["*"],
