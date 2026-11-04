@@ -34,3 +34,11 @@
   .citizen-service-card:hover,.citizen-service-card:active,.citizen-assistant form button:active,
   .citizen-info-panel form button:active,.citizen-panel-head button:active,.citizen-back:active{transform:none}
 }
+
+.dashboard-ui .citizen-view.has-module-back{position:relative;padding-top:64px}
+.dashboard-ui .dashboard-module-view{position:relative;display:flex;flex:1;flex-direction:column;min-height:0;padding-top:64px;overflow:hidden;background:var(--paper)}
+.dashboard-ui .citizen-module-back{position:absolute;z-index:5;top:10px;left:22px;display:grid;width:46px;height:46px;place-items:center;padding:0;border:1px solid #0e543e;border-radius:50%;background:#17654b;color:#fff;font-size:26px;font-weight:500;line-height:1;cursor:pointer;box-shadow:0 5px 14px rgba(17,75,54,.22);transition:background-color 160ms ease,box-shadow 160ms ease,transform 160ms ease}
+.dashboard-ui .citizen-module-back:hover{transform:translateY(-2px);background:#0e543e;box-shadow:0 8px 18px rgba(17,75,54,.28)}
+.dashboard-ui .citizen-module-back:active{transform:translateY(0)}
+.dashboard-ui .citizen-module-back:focus-visible{outline:3px solid #8ed0a5;outline-offset:3px}
+@media(max-width:760px){.dashboard-ui .citizen-module-back{left:14px;width:42px;height:42px;font-size:24px}.dashboard-ui .citizen-view.has-module-back,.dashboard-ui .dashboard-module-view{padding-top:60px}}

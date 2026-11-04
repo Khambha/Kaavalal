@@ -17,6 +17,15 @@ import ResponderFeed from "./pages/ResponderFeed.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
+function DashboardRoute() {
+  const role = sessionStorage.getItem("token")
+    ? sessionStorage.getItem("role")
+    : localStorage.getItem("role");
+  return ["rescuer", "responder"].includes(role)
+    ? <Navigate to="/responder" replace />
+    : <Dashboard />;
+}
+
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter>
@@ -28,7 +37,7 @@ createRoot(document.getElementById("root")).render(
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/signup" element={<Signup />} />
 
-        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard" element={<DashboardRoute />} />
         <Route path="/responder" element={<ResponderFeed />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />

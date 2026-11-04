@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 from app.models.help_request import HelpRequest
+from app.models.help_request_message import HelpRequestMessage  # noqa: F401
 from app.models.admin_audit_log import AdminAuditLog
 from app.models.admin_user import AdminUser
 from app.models.responder_coverage import ResponderCoverage

@@ -21,6 +21,7 @@ from pydantic import ValidationError
 
 from app.core.database import get_db
 from app.models.help_request import HelpRequest
+from app.models.help_request_message import HelpRequestMessage
 from app.models.user import User
 from app.models.responder_coverage import ResponderCoverage
 from app.models.shelter import RequestStatusEvent
@@ -29,6 +30,7 @@ from app.schemas.help_request import (
     HelpRequestCreate,
     HelpRequestResponse,
 )
+from app.schemas.help_request_message import HelpRequestMessageCreate
 
 # IMPORTANT:
 # Replace this import with your existing authentication dependency
@@ -206,6 +208,19 @@ def require_request_coverage(db: Session, user: User, request: HelpRequest):
             status_code=403,
             detail="This request is outside your assigned district coverage.",
         )
+
+
+def message_public(db: Session, item: HelpRequestMessage):
+    sender = db.get(User, item.sender_user_id)
+    return {
+        "id": item.id,
+        "help_request_id": item.help_request_id,
+        "sender_user_id": item.sender_user_id,
+        "sender_role": item.sender_role,
+        "sender_name": sender.full_name if sender else "User",
+        "message": item.message,
+        "created_at": item.created_at,
+    }
 
 
 async def save_image(file: Optional[UploadFile]):
@@ -419,6 +434,50 @@ def get_my_request_history(request_id: int, db: Session = Depends(get_db), curre
         require_request_coverage(db, current_user, item)
     events = db.query(RequestStatusEvent).filter(RequestStatusEvent.help_request_id == item.id).order_by(RequestStatusEvent.created_at.asc(), RequestStatusEvent.id.asc()).all()
     return [event_public(event) for event in events]
+
+
+def authorize_conversation(db: Session, help_request: HelpRequest, user: User):
+    if user.role == "citizen" and help_request.user_id == user.id:
+        return
+    if user.role in {"responder", "rescuer"} and help_request.assigned_responder_id == user.id:
+        require_request_coverage(db, user, help_request)
+        return
+    raise HTTPException(status_code=403, detail="Only the reporting citizen and assigned responder can access this conversation.")
+
+
+@router.get("/{request_id}/messages")
+def get_request_messages(request_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    help_request = db.get(HelpRequest, request_id)
+    if not help_request:
+        raise HTTPException(status_code=404, detail="Help request not found.")
+    authorize_conversation(db, help_request, current_user)
+    messages = db.query(HelpRequestMessage).filter(
+        HelpRequestMessage.help_request_id == request_id
+    ).order_by(HelpRequestMessage.created_at.asc(), HelpRequestMessage.id.asc()).all()
+    return [message_public(db, item) for item in messages]
+
+
+@router.post("/{request_id}/messages", status_code=201)
+def send_request_message(request_id: int, data: HelpRequestMessageCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    help_request = db.get(HelpRequest, request_id)
+    if not help_request:
+        raise HTTPException(status_code=404, detail="Help request not found.")
+    authorize_conversation(db, help_request, current_user)
+    if help_request.status in {"Resolved", "Rejected"}:
+        raise HTTPException(status_code=409, detail="This conversation is closed with the request.")
+    clean_message = data.message.strip()
+    if not clean_message:
+        raise HTTPException(status_code=422, detail="Message cannot be blank.")
+    item = HelpRequestMessage(
+        help_request_id=request_id,
+        sender_user_id=current_user.id,
+        sender_role="citizen" if current_user.role == "citizen" else "responder",
+        message=clean_message,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return message_public(db, item)
 
 
 @router.get("/{request_id}", response_model=HelpRequestResponse)

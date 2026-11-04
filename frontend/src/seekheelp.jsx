@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import "./seekhelp.css";
 import { t, localeName } from "./services/i18n";
 import { queueOfflineRequest } from "./services/offlineQueue";
+import HelpRequestConversation from "./components/HelpRequestConversation";
 
 const API_URL = `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/api/help-requests`;
 
@@ -81,6 +82,7 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [histories, setHistories] = useState({});
+  const [openConversations, setOpenConversations] = useState({});
   const [requestUpdates, setRequestUpdates] = useState([]);
   const requestSnapshots = useRef(null);
   const requestLoadInProgress = useRef(false);
@@ -856,6 +858,8 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
                 </small>
                 <button type="button" className="secondary-button" onClick={() => toggleHistory(request.id)}>{histories[request.id] ? t("Hide status history",language) : t("View status history",language)}</button>
                 {histories[request.id] && <ol className="request-status-history">{histories[request.id].map(item=><li key={item.id}><b>{t(item.status,language)}</b><span>{t(item.note,language)}</span><small>{new Date(item.created_at).toLocaleString(localeName(language))}</small></li>)}</ol>}
+                <button type="button" className="secondary-button" onClick={() => setOpenConversations(previous => ({ ...previous, [request.id]: !previous[request.id] }))}>{openConversations[request.id] ? (language === "ml" ? "സംഭാഷണം അടയ്ക്കുക" : "Close conversation") : (language === "ml" ? "രക്ഷാപ്രവർത്തക സംഘവുമായി സംസാരിക്കുക" : "Message the response team")}</button>
+                {openConversations[request.id] && <HelpRequestConversation requestId={request.id} role="citizen" language={language} closed={["Resolved", "Rejected"].includes(request.status)} />}
               </article>
             ))}
           </div>

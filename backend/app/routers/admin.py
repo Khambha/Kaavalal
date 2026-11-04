@@ -11,6 +11,7 @@ from app.models.admin_audit_log import AdminAuditLog
 from app.models.admin_user import AdminUser
 from app.models.alert import Alert
 from app.models.help_request import HelpRequest
+from app.models.help_request_message import HelpRequestMessage
 from app.models.organization import Organization
 from app.models.user import User
 from app.models.responder_coverage import ResponderCoverage
@@ -564,6 +565,29 @@ def list_requests(status: str | None = None, district: str | None = None, limit:
     total = query.count()
     rows = query.order_by(HelpRequest.created_at.desc()).offset(offset).limit(limit).all()
     return {"total": total, "limit": limit, "offset": offset, "items": [request_public(item) for item in rows]}
+
+
+@router.get("/requests/{request_id}/messages")
+def list_request_messages(request_id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    request = db.get(HelpRequest, request_id)
+    if request is None:
+        raise HTTPException(status_code=404, detail="Help request not found.")
+    rows = db.query(HelpRequestMessage).filter(
+        HelpRequestMessage.help_request_id == request_id
+    ).order_by(HelpRequestMessage.created_at.asc(), HelpRequestMessage.id.asc()).all()
+    result = []
+    for item in rows:
+        sender = db.get(User, item.sender_user_id)
+        result.append({
+            "id": item.id,
+            "help_request_id": item.help_request_id,
+            "sender_user_id": item.sender_user_id,
+            "sender_role": item.sender_role,
+            "sender_name": sender.full_name if sender else "User",
+            "message": item.message,
+            "created_at": item.created_at,
+        })
+    return result
 
 
 @router.patch("/requests/{request_id}/status")

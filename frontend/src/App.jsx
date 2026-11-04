@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./index.css";
 import "./dashboard-ui/dashboard.css";
 import "./dashboard-ui/integration.css";
@@ -307,7 +308,13 @@ const DISTRICT_DEFAULTS = {
   },
 };
 
+function CitizenModuleBack({ language, onClick }) {
+  return <button className="citizen-module-back" type="button" onClick={onClick} aria-label={t("Citizen Portal", language)} title={t("Citizen Portal", language)}>←</button>;
+}
+
 function App() {
+  const navigate = useNavigate();
+  const routeLocation = useLocation();
   const [districts, setDistricts] = useState(initialDistricts);
   // Default to Palakkad as shown in Image 1
   const [selectedDistrict, setSelectedDistrict] = useState(
@@ -331,6 +338,20 @@ function App() {
   const [shelters, setShelters] = useState([]);
   const [activeView, setActiveView] = useState("citizen");
   const [language, setLanguage] = useState(localStorage.getItem("kaavalal_language") === "ml" ? "ml" : "en");
+
+  useEffect(() => {
+    const nextView = routeLocation.state?.citizenView;
+    setActiveView(["citizen", "dashboard", "alerts", "information", "help", "sos", "shelter"].includes(nextView) ? nextView : "citizen");
+  }, [routeLocation.key, routeLocation.state]);
+
+  function navigateToView(view, replace = false) {
+    if (view === activeView) return;
+    setActiveView(view);
+    navigate(routeLocation.pathname, {
+      replace,
+      state: { ...routeLocation.state, citizenView: view },
+    });
+  }
 
   useEffect(() => {
     let active = true;
@@ -687,9 +708,9 @@ function App() {
         </div>
 
         <nav className="portal-nav" aria-label="Citizen navigation">
-          <button className={activeView === "citizen" ? "active" : ""} onClick={() => setActiveView("citizen")}>{t("Citizen Portal",language)}</button>
-          <button className={activeView === "dashboard" ? "active" : ""} onClick={() => setActiveView("dashboard")}>{t("Disaster Dashboard",language)}</button>
-          <button className="portal-sos" onClick={() => setActiveView("sos")}>SOS</button>
+          <button className={activeView === "citizen" ? "active" : ""} onClick={() => navigateToView("citizen")}>{t("Citizen Portal",language)}</button>
+          <button className={activeView === "dashboard" ? "active" : ""} onClick={() => navigateToView("dashboard")}>{t("Disaster Dashboard",language)}</button>
+          <button className="portal-sos" onClick={() => navigateToView("sos")}>SOS</button>
           <button className="portal-language" onClick={() => { const next = language === "en" ? "ml" : "en"; setLanguage(next); localStorage.setItem("kaavalal_language",next); }} aria-label="Change language">{language === "en" ? "മലയാളം" : "English"}</button>
         </nav>
         <div className={`system-status ${apiClass}`} role="status">
@@ -699,7 +720,9 @@ function App() {
       </header>
       <OfflineSync language={language} />
 
-      {activeView === "dashboard" ? <main className="dashboard">
+      {activeView === "dashboard" ? <div className="dashboard-module-view">
+        <CitizenModuleBack language={language} onClick={() => navigateToView("citizen", true)} />
+        <main className="dashboard">
         {/* DISTRICT LIST */}
         <aside className="district-sidebar" aria-label="Districts">
           <div className="sidebar-header">
@@ -1046,10 +1069,11 @@ function App() {
             </div>
           )}
         </aside>
-      </main> : <div className="citizen-view">
-        {activeView === "citizen" && <CitizenPortal selectedLac={selectedLac} selectedDistrict={selectedDistrict} language={language} onNavigate={setActiveView} />}
-        {activeView === "alerts" && <CitizenAlerts language={language} onBack={() => setActiveView("citizen")} />}
-        {activeView === "information" && <CitizenInformation selectedDistrict={selectedDistrict} language={language} onBack={() => setActiveView("citizen")} />}
+      </main></div> : <div className={`citizen-view ${activeView !== "citizen" ? "has-module-back" : ""}`}>
+        {activeView !== "citizen" && <CitizenModuleBack language={language} onClick={() => navigateToView("citizen", true)} />}
+        {activeView === "citizen" && <CitizenPortal selectedLac={selectedLac} selectedDistrict={selectedDistrict} language={language} onNavigate={navigateToView} />}
+        {activeView === "alerts" && <CitizenAlerts language={language} />}
+        {activeView === "information" && <CitizenInformation selectedDistrict={selectedDistrict} language={language} />}
         {(activeView === "help" || activeView === "sos") && <SeekHelp mode={activeView} language={language} defaultLac={selectedLac} />}
         {activeView === "shelter" && <ShelterRequests shelters={shelters} language={language} />}
       </div>}

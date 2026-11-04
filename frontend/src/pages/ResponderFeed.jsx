@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import "./responder.css";
 import "./responder-shelters.css";
 import "./responder-map.css";
 import ChatWidget from "../components/chatbot/ChatWidget";
+import HelpRequestConversation from "../components/HelpRequestConversation";
 import KeralaMap from "../dashboard-ui/KeralaMap";
 import "../dashboard-ui/dashboard.css";
+import "./responder-console.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -44,8 +46,12 @@ export default function ResponderFeed() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [issuingId, setIssuingId] = useState(null);
-  const [activeView, setActiveView] = useState("operations");
+  const [activeView, setActiveView] = useState("overview");
   const [mapLayer, setMapLayer] = useState("people");
+  const [openConversationId, setOpenConversationId] = useState(null);
+  const [incidentQuery, setIncidentQuery] = useState("");
+  const [incidentStatus, setIncidentStatus] = useState("");
+  const [incidentUrgency, setIncidentUrgency] = useState("");
 
   const load = useCallback(async () => {
     setError("");
@@ -114,7 +120,7 @@ export default function ResponderFeed() {
 
   async function update(item, status) {
     setBusyId(item.id);
-    const params = new URLSearchParams({ status, responder_notes: notes[item.id] || "" });
+    const params = new URLSearchParams({ status, responder_notes: notes[item.id] ?? item.responder_notes ?? "" });
     try { await request(`/api/help-requests/${item.id}/status?${params}`, { method: "PATCH" }); await load(); }
     catch (err) { setError(err.message); }
     finally { setBusyId(null); }
@@ -210,68 +216,108 @@ export default function ResponderFeed() {
     return new Date(b.created_at) - new Date(a.created_at);
   });
 
-  return <main className="responder-page">
-    <header className="responder-header"><div><span className="responder-kicker">KAAVALAL · FIELD OPERATIONS</span><h1>Responder dashboard</h1><p>Citizen requests in your assigned coverage areas.</p><div className={`responder-availability ${user?.is_available ? "is-available" : ""}`}><span className="availability-indicator"/>{user?.is_available ? "Available to respond" : "Unavailable"}</div></div><div className="responder-header-actions"><button className="availability-toggle" onClick={toggleAvailability} disabled={!user || busyId === "availability"} aria-pressed={Boolean(user?.is_available)}>{busyId === "availability" ? "Updating…" : user?.is_available ? "Set unavailable" : "Set available"}</button><Link to="/dashboard">Public dashboard</Link><button onClick={signOut}>Sign out</button></div></header>
-    <section className="coverage-strip"><b>District coverage</b>{coverageDistricts.length ? <>{coverageDistricts.map(district=><span key={district}>All LACs · {district}</span>)}<small>Citizen requests from every constituency in these districts appear here.</small></> : <span>No district coverage is assigned yet. Ask an administrator to set your coverage.</span>}</section>
-    {error && <div className="responder-error" role="alert">{error}<button onClick={()=>setError("")}>Dismiss</button></div>}
-    {notice && <div className="responder-notice" role="status">{notice}<button onClick={()=>setNotice("")}>Dismiss</button></div>}
-    <section className={`responder-urgent-notification ${urgentUnclaimed.length ? "has-urgent" : "is-clear"}`} role="status" aria-live="polite">
-      <div className="urgent-notification-heading"><span className="urgent-notification-icon" aria-hidden="true">{urgentUnclaimed.length ? "!" : "✓"}</span><div><strong>{loading ? "Checking urgent requests…" : urgentUnclaimed.length ? `${urgentUnclaimed.length} urgent unclaimed request${urgentUnclaimed.length === 1 ? "" : "s"}` : "No urgent unclaimed requests"}</strong><p>{urgentUnclaimed.length ? "Critical and high urgency reports in your assigned coverage." : "New urgent requests will appear here while this dashboard is open."}</p></div><button onClick={load}>Refresh</button></div>
-      {urgentUnclaimed.length > 0 && <div className="urgent-notification-list">{urgentUnclaimed.slice(0, 3).map(item => <article key={`urgent-notice-${item.id}`}><div><span className="urgent-level">{item.urgency}</span><b>{item.emergency_type}</b><small>{item.lac} · {item.district} · {item.people_affected} affected</small></div><button onClick={() => document.getElementById(`responder-request-${item.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>Review request</button></article>)}</div>}
-    </section>
-    <nav className="responder-view-tabs" aria-label="Responder dashboard views">
-      <button className={activeView === "operations" ? "active" : ""} aria-pressed={activeView === "operations"} onClick={() => setActiveView("operations")}>Operations</button>
-      <button className={activeView === "map" ? "active" : ""} aria-pressed={activeView === "map"} onClick={() => setActiveView("map")}>Dashboard map</button>
-      <button className={activeView === "resources" ? "active" : ""} aria-pressed={activeView === "resources"} onClick={() => setActiveView("resources")}>Resources</button>
-    </nav>
-    {activeView === "map" ? <section className="responder-map-panel">
-      <div className="responder-feed-heading"><div><h2>Kerala response map</h2><p>District risk overview with operational layers for your coverage areas.</p></div><button onClick={load}>Refresh</button></div>
-      <div className="responder-map-toolbar" role="group" aria-label="Map layer">
-        {[ ["people", "People"], ["shelters", "Shelters"], ["constituencies", "Constituencies"] ].map(([value, label]) => <button key={value} className={mapLayer === value ? "active" : ""} aria-pressed={mapLayer === value} onClick={() => setMapLayer(value)}>{label}</button>)}
-        <span>{mapLayer === "people" ? `${mapRequests.length} active request${mapRequests.length === 1 ? "" : "s"} pinned` : mapLayer === "shelters" ? `${shelters.length} shelter${shelters.length === 1 ? "" : "s"} in view` : "Assembly constituencies"}</span>
-      </div>
-      {mapLayer === "people" && unpinnedRequestCount > 0 && <p className="responder-map-note">{unpinnedRequestCount} active request{unpinnedRequestCount === 1 ? "" : "s"} {unpinnedRequestCount === 1 ? "has" : "have"} no coordinates and cannot be pinned.</p>}
-      <div className="responder-map-canvas dashboard-ui">
-        <KeralaMap selectedDistrict={mapDistrict} districts={[]} selectedLayer="Overall Risk" showConstituencies={mapLayer === "constituencies"} lacs={[]} shelters={shelters} showShelters={mapLayer === "shelters"} helpRequests={mapRequests} showHelpRequests={mapLayer === "people"} onClaimHelpRequest={claim} />
-      </div>
-    </section> : activeView === "resources" ? <section className="responder-resources responder-resource-module">
-      <div className="responder-feed-heading"><div><h2>District relief resources</h2><p>Stock allocated by admins for your assigned districts. Use − to issue supplies; only admins can replenish stock.</p></div><button onClick={load}>Refresh</button></div>
-      {loading ? <p className="responder-empty">Loading district inventory…</p> : !resources.length ? <p className="responder-empty">No relief supplies are currently available in your covered districts.</p> : <div className="responder-resource-grid">{resources.map(resource=>{
-        const draft=resourceDrafts[resource.id]||{quantity:"",reason:"",help_request_id:""};
-        const linkedRequests=items.filter(item=>item.assigned_responder_id===user?.id&&!['Resolved','Rejected'].includes(item.status)&&item.district?.toLowerCase()===resource.district?.toLowerCase());
-        return <article className="responder-resource-card" key={resource.id}>
-          <div className="responder-card-top"><div><span className="responder-loc">{resource.district} · {resource.category}</span><h3>{resource.name}</h3></div><span className="responder-stock-count">{resource.quantity_available} {resource.unit}</span></div>
-          <p className="responder-stock-note">Current shared district balance · Admin-managed allocation.</p>
-          <div className="responder-resource-form">
-            <label>Quantity change<input type="number" min="1" value={draft.quantity} onChange={e=>updateResourceDraft(resource.id,"quantity",e.target.value)} placeholder="Enter a quantity"/></label>
-            <label>Reason<input value={draft.reason} onChange={e=>updateResourceDraft(resource.id,"reason",e.target.value)} placeholder="Describe the operational need"/></label>
-            {linkedRequests.length>0&&<label>Link to assigned help request (optional)<select value={draft.help_request_id} onChange={e=>updateResourceDraft(resource.id,"help_request_id",e.target.value)}><option value="">No linked request</option>{linkedRequests.map(item=><option key={item.id} value={item.id}>Request #{item.id} · {item.emergency_type}</option>)}</select></label>}
-            <div className="responder-resource-controls"><button className="resource-issue" disabled={issuingId===resource.id||resource.quantity_available<1} onClick={()=>issueResource(resource)}>{issuingId===resource.id?"Saving…":"− Issue supplies"}</button></div>
-          </div>
-        </article>;
-      })}</div>}
-    </section> : <>
+  const incidentRows = prioritizedItems.filter(item => {
+    const query = incidentQuery.trim().toLowerCase();
+    const searchable = `${item.id} ${item.emergency_type} ${item.district} ${item.lac} ${item.situation_description}`.toLowerCase();
+    return (!incidentStatus || item.status === incidentStatus)
+      && (!incidentUrgency || item.urgency === incidentUrgency)
+      && (!query || searchable.includes(query));
+  });
+  const assignedActive = activeRequests.filter(item => item.assigned_responder_id === user?.id);
+  const pendingShelters = shelterRequests.filter(item => item.status === "Pending").length;
+  const lowStockCount = resources.filter(item => Number(item.quantity_available) <= Number(item.low_stock_threshold || 0)).length;
+
+  function renderIncidentCard(item) {
+    const owned = item.assigned_responder_id === user?.id;
+    const closed = ["Resolved", "Rejected"].includes(item.status);
+    return <article className="responder-card" id={`responder-request-${item.id}`} key={item.id}>
+      <div className="responder-card-top"><div><span className="responder-loc">HELP-{item.id} · {item.lac} · {item.district}</span><h3>{item.emergency_type}</h3></div><span className={`responder-status ${item.urgency.toLowerCase()}`}>{item.urgency} · {item.status}</span></div>
+      <p>{item.situation_description}</p>
+      <div className="responder-meta"><span>People affected: <b>{item.people_affected}</b></span><span>Location: <b>{item.location_description}</b></span><span>Submitted: <b>{new Date(item.created_at).toLocaleString()}</b></span></div>
+      {item.special_assistance&&<p className="responder-assistance"><b>Special assistance:</b> {item.special_assistance}</p>}
+      {item.shelter_id&&<p className="responder-assistance"><b>Assigned shelter:</b> {shelters.find(s=>s.id===item.shelter_id)?.name||`Shelter #${item.shelter_id}`}</p>}
+      {owned&&!closed&&<div className="responder-card-footer emergency-shelter-assignment"><select aria-label="Assign this emergency to a shelter" value={emergencyShelterChoices[item.id]||item.shelter_id||""} onChange={e=>setEmergencyShelterChoices(v=>({...v,[item.id]:e.target.value}))}><option value="">Assign household to an in-coverage shelter</option>{shelters.filter(s=>s.can_assign&&s.available+(s.id===item.shelter_id?item.people_affected:0)>=item.people_affected).map(s=><option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.available} spaces</option>)}</select><button disabled={busyId===item.id} onClick={()=>assignEmergencyShelter(item)}>{item.shelter_id?"Change shelter":"Assign shelter"}</button></div>}
+      {owned&&!closed&&<div className="responder-actions"><label>Response notes<textarea value={notes[item.id]??item.responder_notes??""} onChange={e=>setNotes(prev=>({...prev,[item.id]:e.target.value}))} placeholder="Share an update with the citizen"/><small className="responder-note-hint">Saved notes appear in the citizen’s request tracker.</small><button className="responder-save-note" disabled={busyId===item.id||(notes[item.id]??item.responder_notes??"")===(item.responder_notes??"")} onClick={()=>update(item,item.status)}>{busyId===item.id?"Saving…":"Save update"}</button></label><label>Update status<select value={item.status} onChange={e=>update(item,e.target.value)} disabled={busyId===item.id}>{["Assigned","In Progress","Resolved","Rejected"].map(status=><option key={status}>{status}</option>)}</select></label></div>}
+      {owned&&<><button className="responder-conversation-toggle" type="button" onClick={()=>setOpenConversationId(openConversationId===item.id?null:item.id)}>{openConversationId===item.id?"Close conversation":"Open citizen conversation"}</button>{openConversationId===item.id&&<HelpRequestConversation requestId={item.id} role="responder" closed={closed}/>}</>}
+      {!closed&&<div className="responder-card-footer">{item.assigned_responder_id ? <span>{owned?"Assigned to you":"Assigned to another responder"}</span> : <button disabled={busyId===item.id} onClick={()=>claim(item)}>{busyId===item.id?"Claiming…":"Claim report"}</button>}</div>}
+    </article>;
+  }
+
+  const renderShelterOperations = <>
     <section className="responder-resources shelter-ops">
-      <div className="responder-feed-heading"><div><h2>Shelter requests</h2><p>Requests are routed by the preferred shelter’s LAC. Approve before assigning a bed.</p></div><span>{shelterRequests.filter(r=>r.status==="Pending").length} awaiting review</span></div>
+      <div className="responder-feed-heading"><div><h2>Shelter requests</h2><p>Review requests and coordinate available beds in your coverage area.</p></div><span>{pendingShelters} awaiting review</span></div>
       {loading ? <p className="responder-empty">Loading shelter requests…</p> : !shelterRequests.length ? <p className="responder-empty">No shelter requests in your coverage areas.</p> : <div className="responder-cards">{shelterRequests.map(item=><article className="responder-card" key={`shelter-request-${item.id}`}><div className="responder-card-top"><div><span className="responder-loc">{item.lac} · {item.district}</span><h3>{item.household_name} · {item.people_count} people</h3></div><span className="responder-status">{item.status}</span></div><p>Preferred: <b>{item.preferred_shelter?.name}</b> · Contact {item.phone} · Aadhaar ending {item.aadhaar_last4}</p>{item.special_needs&&<p><b>Needs:</b> {item.special_needs}</p>}{item.assigned_shelter&&<p>Assigned to <b>{item.assigned_shelter.name}</b></p>}{item.status==="Pending"&&<div className="responder-card-footer"><button disabled={busyId===`shelter-${item.id}`} onClick={()=>shelterDecision(item,"Approved")}>Approve request</button><button className="shelter-reject" disabled={busyId===`shelter-${item.id}`} onClick={()=>shelterDecision(item,"Rejected")}>Reject</button></div>}{["Approved","Assigned"].includes(item.status)&&<div className="responder-card-footer"><select aria-label="Choose shelter in your jurisdiction" value={shelterChoices[item.id]||item.assigned_shelter?.id||""} onChange={e=>setShelterChoices(v=>({...v,[item.id]:e.target.value}))}><option value="">Choose an in-coverage shelter</option>{shelters.filter(s=>s.can_assign&&s.available+(s.id===item.assigned_shelter?.id?item.people_count:0)>=item.people_count).map(s=><option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.available} spaces</option>)}</select><button disabled={busyId===`shelter-${item.id}`} onClick={()=>assignShelter(item)}>{item.assigned_shelter?"Update assignment":"Assign shelter"}</button></div>}</article>)}</div>}
     </section>
-    <section className="responder-resources shelter-ops"><div className="responder-feed-heading"><div><h2>Shelter directory</h2><p>All active shelters are visible. Occupancy can only be changed in your assigned areas.</p></div></div><div className="responder-resource-grid">{shelters.map(s=><article className="responder-resource-card" key={`shelter-${s.id}`}><div className="responder-card-top"><div><span className="responder-loc">{s.district} · {s.lac}</span><h3>{s.name}</h3></div><span className="responder-stock-count">{s.occupied}/{s.capacity}</span></div><p>{s.building_type} · {s.address}<br/>{s.available} spaces available</p>{s.can_assign?<div className="shelter-counter"><button disabled={s.occupied<=0} onClick={()=>adjustOccupancy(s,-1)} aria-label={`Remove one person from ${s.name}`}>−</button><span>Update headcount</span><button disabled={s.occupied>=s.capacity} onClick={()=>adjustOccupancy(s,1)} aria-label={`Add one person to ${s.name}`}>+</button></div>:<small>Outside your assigned jurisdiction</small>}</article>)}</div></section>
-    <div className="responder-feed-heading"><div><h2>Help requests</h2><p>{items.length} request{items.length===1?"":"s"} in your area</p></div><button onClick={load}>Refresh</button></div>
-    {loading ? <p className="responder-empty">Loading requests…</p> : !prioritizedItems.length ? <p className="responder-empty">There are no citizen requests in your coverage areas.</p> : <div className="responder-cards">{prioritizedItems.map(item=>{
-      const owned = item.assigned_responder_id === user?.id;
-      const closed = ["Resolved", "Rejected"].includes(item.status);
-      return <article className="responder-card" id={`responder-request-${item.id}`} key={item.id}>
-        <div className="responder-card-top"><div><span className="responder-loc">{item.lac} · {item.district}</span><h3>{item.emergency_type}</h3></div><span className={`responder-status ${item.urgency.toLowerCase()}`}>{item.urgency} · {item.status}</span></div>
-        <p>{item.situation_description}</p>
-        <div className="responder-meta"><span>People affected: <b>{item.people_affected}</b></span><span>Location: <b>{item.location_description}</b></span><span>Submitted: <b>{new Date(item.created_at).toLocaleString()}</b></span></div>
-        {item.special_assistance&&<p className="responder-assistance"><b>Special assistance:</b> {item.special_assistance}</p>}
-        {item.shelter_id&&<p className="responder-assistance"><b>Assigned shelter:</b> {shelters.find(s=>s.id===item.shelter_id)?.name||`Shelter #${item.shelter_id}`}</p>}
-        {owned&&!closed&&<div className="responder-card-footer emergency-shelter-assignment"><select aria-label="Assign this emergency to a shelter" value={emergencyShelterChoices[item.id]||item.shelter_id||""} onChange={e=>setEmergencyShelterChoices(v=>({...v,[item.id]:e.target.value}))}><option value="">Assign household to an in-coverage shelter</option>{shelters.filter(s=>s.can_assign&&s.available+(s.id===item.shelter_id?item.people_affected:0)>=item.people_affected).map(s=><option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.available} spaces</option>)}</select><button disabled={busyId===item.id} onClick={()=>assignEmergencyShelter(item)}>{item.shelter_id?"Change shelter":"Assign shelter"}</button></div>}
-        {owned&&!closed&&<div className="responder-actions"><label>Response notes<textarea value={notes[item.id]??item.responder_notes??""} onChange={e=>setNotes(prev=>({...prev,[item.id]:e.target.value}))} placeholder="Share an update with the citizen"/><small className="responder-note-hint">Saved notes appear in the citizen’s request tracker.</small><button className="responder-save-note" disabled={busyId===item.id||(notes[item.id]??item.responder_notes??"")===(item.responder_notes??"")} onClick={()=>update(item,item.status)}>{busyId===item.id?"Saving…":"Save update"}</button></label><label>Update status<select value={item.status} onChange={e=>update(item,e.target.value)} disabled={busyId===item.id}>{["Assigned","In Progress","Resolved","Rejected"].map(status=><option key={status}>{status}</option>)}</select></label></div>}
-        {!closed&&<div className="responder-card-footer">{item.assigned_responder_id ? <span>{owned?"Assigned to you":"Already assigned to another responder"}</span> : <button disabled={busyId===item.id} onClick={()=>claim(item)}>{busyId===item.id?"Claiming…":"Claim request"}</button>}</div>}
+    <section className="responder-resources shelter-ops"><div className="responder-feed-heading"><div><h2>Shelter directory</h2><p>Capacity and occupancy in your operational area.</p></div></div><div className="responder-resource-grid">{shelters.map(s=><article className="responder-resource-card" key={`shelter-${s.id}`}><div className="responder-card-top"><div><span className="responder-loc">{s.district} · {s.lac}</span><h3>{s.name}</h3></div><span className="responder-stock-count">{s.occupied}/{s.capacity}</span></div><p>{s.building_type} · {s.address}<br/>{s.available} spaces available</p>{s.can_assign?<div className="shelter-counter"><button disabled={s.occupied<=0} onClick={()=>adjustOccupancy(s,-1)} aria-label={`Remove one person from ${s.name}`}>−</button><span>Update headcount</span><button disabled={s.occupied>=s.capacity} onClick={()=>adjustOccupancy(s,1)} aria-label={`Add one person to ${s.name}`}>+</button></div>:<small>Outside your assigned jurisdiction</small>}</article>)}</div></section>
+  </>;
+
+  const renderResources = <section className="responder-resources responder-resource-module">
+    <div className="responder-feed-heading"><div><h2>District relief resources</h2><p>Issue supplies for an operational need. Replenishment is managed by administrators.</p></div><button onClick={load}>Refresh</button></div>
+    {loading ? <p className="responder-empty">Loading district inventory…</p> : !resources.length ? <p className="responder-empty">No relief supplies are currently available in your covered districts.</p> : <div className="responder-resource-grid">{resources.map(resource=>{
+      const draft=resourceDrafts[resource.id]||{quantity:"",reason:"",help_request_id:""};
+      const linkedRequests=items.filter(item=>item.assigned_responder_id===user?.id&&!['Resolved','Rejected'].includes(item.status)&&item.district?.toLowerCase()===resource.district?.toLowerCase());
+      return <article className="responder-resource-card" key={resource.id}>
+        <div className="responder-card-top"><div><span className="responder-loc">{resource.district} · {resource.category}</span><h3>{resource.name}</h3></div><span className="responder-stock-count">{resource.quantity_available} {resource.unit}</span></div>
+        <p className="responder-stock-note">{Number(resource.quantity_available)<=Number(resource.low_stock_threshold||0)?"Low stock · Flag this item to an administrator.":"Available for response-team operations."}</p>
+        <div className="responder-resource-form"><label>Quantity to issue<input type="number" min="1" max={resource.quantity_available} value={draft.quantity} onChange={e=>updateResourceDraft(resource.id,"quantity",e.target.value)} placeholder="Enter a quantity"/></label><label>Reason<input value={draft.reason} onChange={e=>updateResourceDraft(resource.id,"reason",e.target.value)} placeholder="Describe the operational need"/></label>{linkedRequests.length>0&&<label>Link to assigned report (optional)<select value={draft.help_request_id} onChange={e=>updateResourceDraft(resource.id,"help_request_id",e.target.value)}><option value="">No linked report</option>{linkedRequests.map(item=><option key={item.id} value={item.id}>HELP-{item.id} · {item.emergency_type}</option>)}</select></label>}<div className="responder-resource-controls"><button className="resource-issue" disabled={issuingId===resource.id||resource.quantity_available<1} onClick={()=>issueResource(resource)}>{issuingId===resource.id?"Saving…":"Issue supplies"}</button></div></div>
       </article>;
     })}</div>}
-    </>}
-    <ChatWidget district={coverage[0]?.district || null} page="responder" />
+  </section>;
+
+  const renderMap = <section className="responder-map-panel">
+    <div className="responder-feed-heading"><div><h2>Response map</h2><p>Inspect active requests and shelters within your coverage areas.</p></div><button onClick={load}>Refresh</button></div>
+    <div className="responder-map-toolbar" role="group" aria-label="Map layer">{[["people","Active reports"],["shelters","Shelters"],["constituencies","Constituencies"]].map(([value,label])=><button key={value} className={mapLayer===value?"active":""} aria-pressed={mapLayer===value} onClick={()=>setMapLayer(value)}>{label}</button>)}<span>{mapLayer==="people"?`${mapRequests.length} reports mapped`:mapLayer==="shelters"?`${shelters.length} shelters in view`:"Assembly constituencies"}</span></div>
+    {mapLayer==="people"&&unpinnedRequestCount>0&&<p className="responder-map-note">{unpinnedRequestCount} active reports don’t have coordinates and can’t be pinned.</p>}
+    <div className="responder-map-canvas dashboard-ui"><KeralaMap selectedDistrict={mapDistrict} districts={[]} selectedLayer="Overall Risk" showConstituencies={mapLayer==="constituencies"} lacs={[]} shelters={shelters} showShelters={mapLayer==="shelters"} helpRequests={mapRequests} showHelpRequests={mapLayer==="people"} onClaimHelpRequest={claim}/></div>
+  </section>;
+
+  const navItems = [
+    ["overview", "Overview", "◫", null],
+    ["incidents", "Incident reports", "⌖", activeRequests.length],
+    ["shelters", "Shelter operations", "⌂", pendingShelters],
+    ["resources", "Relief resources", "▤", resources.length],
+    ["map", "Response map", "⌖", null],
+  ];
+
+  return <main className="responder-page responder-console">
+    <aside className="responder-sidebar">
+      <div className="responder-brand"><span className="responder-brand-mark">K</span><div><b>KAAVALAL</b><small>FIELD OPERATIONS</small></div></div>
+      <div className="responder-sidebar-label">RESPONSE CONSOLE</div>
+      <nav className="responder-console-nav" aria-label="Responder console">
+        {navItems.map(([view,label,icon,count])=><button key={view} className={activeView===view?"active":""} aria-current={activeView===view?"page":undefined} onClick={()=>setActiveView(view)}><span className="responder-nav-icon">{icon}</span><span>{label}</span>{count>0&&<small>{count}</small>}</button>)}
+      </nav>
+      <div className="responder-sidebar-coverage"><span>YOUR COVERAGE</span>{coverageDistricts.length?coverageDistricts.map(district=><b key={district}>{district}</b>):<p>No district assigned</p>}</div>
+      <div className="responder-sidebar-user"><span className="responder-user-avatar">{user?.full_name?.slice(0,1)?.toUpperCase()||"R"}</span><div><b>{user?.full_name||"Responder"}</b><small>{user?.role||"Field responder"}</small></div></div>
+    </aside>
+    <div className="responder-workspace">
+      <header className="responder-header">
+        <div><span className="responder-kicker">KAAVALAL · FIELD OPERATIONS</span><h1>Responder console</h1><p>Coordinate reports, shelters, and local resources.</p></div>
+        <div className="responder-header-actions"><div className={`responder-availability ${user?.is_available?"is-available":""}`}><span className="availability-indicator"/>{user?.is_available?"Available":"Unavailable"}</div><button className="availability-toggle" onClick={toggleAvailability} disabled={!user||busyId==="availability"} aria-pressed={Boolean(user?.is_available)}>{busyId==="availability"?"Updating…":user?.is_available?"Set unavailable":"Set available"}</button><button className="responder-signout" onClick={signOut}>Sign out</button></div>
+      </header>
+      <section className="responder-content">
+        {error&&<div className="responder-error" role="alert">{error}<button onClick={()=>setError("")}>Dismiss</button></div>}
+        {notice&&<div className="responder-notice" role="status">{notice}<button onClick={()=>setNotice("")}>Dismiss</button></div>}
+        {activeView==="overview"&&<>
+          <div className="responder-page-heading"><div><span className="responder-kicker">LIVE OPERATIONS</span><h2>Good day{user?.full_name?`, ${user.full_name.split(" ")[0]}`:""}</h2><p>Here’s the current response picture for your districts.</p></div><button className="responder-refresh" onClick={load} disabled={loading}>{loading?"Refreshing…":"Refresh console"}</button></div>
+          <div className="coverage-strip"><b>Coverage</b>{coverage.length?coverage.map((area,index)=><span key={`${area.district}-${area.lac}-${index}`}>{area.lac} · {area.district}</span>):<span>No coverage assigned. Ask an administrator to set your areas.</span>}</div>
+          <div className="responder-stat-grid"><button onClick={()=>setActiveView("incidents")}><span>Open reports</span><b>{activeRequests.length}</b><small>in your covered districts</small></button><button className={urgentUnclaimed.length?"is-alert":""} onClick={()=>setActiveView("incidents")}><span>Urgent unclaimed</span><b>{urgentUnclaimed.length}</b><small>critical or high urgency</small></button><button onClick={()=>setActiveView("incidents")}><span>Assigned to you</span><b>{assignedActive.length}</b><small>active reports</small></button><button onClick={()=>setActiveView("shelters")}><span>Shelter reviews</span><b>{pendingShelters}</b><small>awaiting a decision</small></button><button onClick={()=>setActiveView("resources")}><span>Low-stock items</span><b>{lowStockCount}</b><small>at or below threshold</small></button></div>
+          <div className="responder-overview-grid">
+            <section className={`responder-urgent-notification ${urgentUnclaimed.length?"has-urgent":"is-clear"}`}><div className="urgent-notification-heading"><span className="urgent-notification-icon">{urgentUnclaimed.length?"!":"✓"}</span><div><strong>{urgentUnclaimed.length?`${urgentUnclaimed.length} urgent report${urgentUnclaimed.length===1?"":"s"} need attention`:"No urgent unclaimed reports"}</strong><p>Critical and high priority reports in your coverage.</p></div><button onClick={()=>setActiveView("incidents")}>Open queue</button></div>{urgentUnclaimed.slice(0,4).map(item=><article className="responder-urgent-row" key={item.id}><span>{item.urgency}</span><div><b>{item.emergency_type}</b><small>HELP-{item.id} · {item.lac}, {item.district}</small></div><button onClick={()=>setActiveView("incidents")}>Review</button></article>)}</section>
+            <section className="responder-overview-panel"><div className="responder-panel-heading"><div><h3>My active assignments</h3><p>Reports currently assigned to you</p></div><button onClick={()=>setActiveView("incidents")}>View all</button></div>{assignedActive.slice(0,5).map(item=><button className="responder-assignment-row" key={item.id} onClick={()=>setActiveView("incidents")}><span className={`assignment-dot ${item.urgency.toLowerCase()}`}/><span><b>HELP-{item.id} · {item.emergency_type}</b><small>{item.lac} · {item.district}</small></span><strong>{item.status}</strong></button>)}{!assignedActive.length&&<p className="responder-empty-inline">No active reports assigned to you.</p>}</section>
+          </div>
+        </>}
+        {activeView==="incidents"&&<>
+          <div className="responder-page-heading"><div><span className="responder-kicker">CITIZEN REPORTS</span><h2>Incident response</h2><p>Claim a report to coordinate directly with the citizen and update progress.</p></div><button className="responder-refresh" onClick={load} disabled={loading}>{loading?"Refreshing…":"Refresh reports"}</button></div>
+          <section className="responder-urgent-notification has-urgent"><div className="urgent-notification-heading"><span className="urgent-notification-icon">!</span><div><strong>{urgentUnclaimed.length?`${urgentUnclaimed.length} urgent unclaimed`:"No urgent unclaimed reports"}</strong><p>Reports are shared with responders assigned to the same district.</p></div></div></section>
+          <div className="responder-list-toolbar"><label><span>Search reports</span><input value={incidentQuery} onChange={event=>setIncidentQuery(event.target.value)} placeholder="ID, incident, district or LAC"/></label><label><span>Status</span><select value={incidentStatus} onChange={event=>setIncidentStatus(event.target.value)}><option value="">All statuses</option>{["Submitted","Under Review","Assigned","In Progress","Resolved","Rejected"].map(status=><option key={status}>{status}</option>)}</select></label><label><span>Urgency</span><select value={incidentUrgency} onChange={event=>setIncidentUrgency(event.target.value)}><option value="">All urgency</option>{["Critical","High","Medium","Low"].map(value=><option key={value}>{value}</option>)}</select></label><strong>{incidentRows.length} reports</strong></div>
+          {loading&&!items.length?<p className="responder-empty">Loading reports…</p>:incidentRows.length?<div className="responder-cards">{incidentRows.map(renderIncidentCard)}</div>:<p className="responder-empty">No reports match these filters.</p>}
+        </>}
+        {activeView==="shelters"&&<><div className="responder-page-heading"><div><span className="responder-kicker">LOCAL ACCOMMODATION</span><h2>Shelter operations</h2><p>Review household requests and coordinate available capacity.</p></div><button className="responder-refresh" onClick={load}>Refresh shelters</button></div>{renderShelterOperations}</>}
+        {activeView==="resources"&&<><div className="responder-page-heading"><div><span className="responder-kicker">DISTRICT INVENTORY</span><h2>Relief resources</h2><p>Issue supplies with a recorded reason and optional report link.</p></div></div>{renderResources}</>}
+        {activeView==="map"&&<><div className="responder-page-heading"><div><span className="responder-kicker">GEOGRAPHIC OPERATIONS</span><h2>Response map</h2><p>Review requests, shelters, and constituency boundaries.</p></div></div>{renderMap}</>}
+      </section>
+      <footer className="responder-console-footer"><span>KAAVALAL FIELD OPERATIONS</span><span>Updates automatically while this console is open</span></footer>
+    </div>
+    <ChatWidget district={coverage[0]?.district||null} page="responder" />
   </main>;
 }
