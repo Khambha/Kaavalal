@@ -5,20 +5,19 @@ import ChatWidget from "../components/chatbot/ChatWidget";
 
 const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const services = [
+  ["sos", "Emergency / SOS response", "Send an urgent request with your location and household needs.", "SOS"],
   ["dashboard", "Citizen dashboard", "Weather, risk indicators, and local exposure information.", "▦"],
   ["help", "Report an incident", "Send a non-emergency incident report to your local response team.", "⌖"],
-  ["sos", "Emergency / SOS response", "Send an urgent request with your location and household needs.", "SOS"],
   ["alerts", "Disaster alerts", "Read current official alerts published by administrators.", "◉"],
   ["shelter", "Find nearby shelter", "View locations, capacity, and request household shelter.", "⌂"],
   ["dashboard", "Disaster map", "Explore Kerala risk layers, constituencies, and shelter pins.", "◇"],
-  ["information", "Disaster information", "Ask about safety, evacuation, SOS requests, and shelters.", "?"],
 ];
 
 export default function CitizenPortal({ onNavigate, selectedLac, selectedDistrict, language = "en" }) {
   const [alerts, setAlerts] = useState([]);
   useEffect(() => { fetch(`${API}/api/alerts/published`).then(r => r.ok ? r.json() : []).then(setAlerts).catch(() => setAlerts([])); }, []);
   return <main className="citizen-portal"><header className="citizen-welcome"><div><span className="citizen-kicker">KAAVALAL · {t("Citizen Services",language)}</span><h1>{t("Citizen Portal",language)}</h1><p>{t("Report an incident, request help, check alerts, and find a shelter.",language)}</p></div><div className="citizen-location"><span>{t("Your starting area",language)}</span><b>{selectedLac?.name || t("Finding your nearest LAC…",language)}</b><small>{selectedLac?.district || "Kerala"}</small></div></header>
-    <section className="citizen-service-grid" aria-label={t("Citizen Services",language)}>{services.map(([key,title,description,icon],i)=><button type="button" className={`citizen-service-card ${key === "sos" ? "citizen-sos-card" : ""}`} key={`${key}-${i}`} onClick={()=>key==="information"?onNavigate("information"):onNavigate(key)}><span className="citizen-service-icon">{icon}</span><span className="citizen-service-copy"><b>{t(title,language)}</b><small>{t(description,language)}</small></span><span className="citizen-arrow">→</span></button>)}</section>
+    <section className="citizen-service-grid" aria-label={t("Citizen Services",language)}>{services.map(([key,title,description,icon],i)=><button type="button" className={`citizen-service-card ${key === "sos" ? "citizen-sos-card" : ""}`} key={`${key}-${i}`} onClick={()=>onNavigate(key)}><span className="citizen-service-icon">{icon}</span><span className="citizen-service-copy"><b>{t(title,language)}</b><small>{t(description,language)}</small></span><span className="citizen-arrow">→</span></button>)}</section>
     <section className="citizen-bottom-grid"><div className="citizen-panel"><div className="citizen-panel-head"><div><span className="citizen-kicker">{t("OFFICIAL UPDATES",language)}</span><h2>{t("Latest disaster alerts",language)}</h2></div><button type="button" onClick={()=>onNavigate("alerts")}>{t("All alerts",language)}</button></div>{alerts.slice(0,3).map(alert=><article className="citizen-alert-row" key={alert.id}><span className={`citizen-severity ${alert.severity}`}>{alert.severity}</span><div><b>{alert.title}</b><p>{alert.district || "Kerala-wide"} · {alert.message}</p></div></article>)}{!alerts.length&&<p className="citizen-muted">{t("No active alerts are published right now.",language)}</p>}</div>
     <div className="citizen-panel citizen-thunai-panel"><span className="citizen-kicker">{t("PREPAREDNESS GUIDE",language)}</span><h2>Thunai · {t("Disaster information",language)}</h2><ChatWidget variant="inline" district={selectedLac?.district || selectedDistrict?.name || null} page="citizen" language={language} /></div></section>
   </main>;
