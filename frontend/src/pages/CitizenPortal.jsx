@@ -7,6 +7,7 @@ const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const services = [
   ["sos", "Emergency / SOS response", "Send an urgent request with your location and household needs.", "SOS"],
   ["dashboard", "Citizen dashboard", "Weather, risk indicators, and local exposure information.", "▦"],
+  ["help", "Report an incident", "Send a non-emergency incident report to your local response team.", "⌖"],
   ["shelter", "Find nearby shelter", "View locations, capacity, and request household shelter.", "⌂"],
 ];
 
