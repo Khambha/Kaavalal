@@ -29,6 +29,21 @@ async function request(path, options = {}) {
   return data;
 }
 
+function ShelterRequestPhoto({ requestId }) {
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoError, setPhotoError] = useState("");
+  async function togglePhoto() {
+    if (photoUrl) { URL.revokeObjectURL(photoUrl); setPhotoUrl(""); return; }
+    setPhotoError("");
+    try {
+      const response = await fetch(`${API_URL}/api/shelters/requests/${requestId}/id-photo`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(result.detail || "Could not open the ID photo."); }
+      setPhotoUrl(URL.createObjectURL(await response.blob()));
+    } catch (err) { setPhotoError(err.message); }
+  }
+  useEffect(() => () => { if (photoUrl) URL.revokeObjectURL(photoUrl); }, [photoUrl]);
+  return <div className="shelter-id-photo"><button type="button" onClick={togglePhoto}>{photoUrl ? "Hide ID photo" : "View ID photo"}</button>{photoError && <small role="alert">{photoError}</small>}{photoUrl && <img src={photoUrl} alt={`Identification photo for shelter request ${requestId}`} />}</div>;
+}
 export default function ResponderFeed() {
   const navigate = useNavigate();
   const [coverage, setCoverage] = useState([]);
@@ -37,6 +52,7 @@ export default function ResponderFeed() {
   const [shelters, setShelters] = useState([]);
   const [shelterRequests, setShelterRequests] = useState([]);
   const [shelterChoices, setShelterChoices] = useState({});
+  const [occupancyAmounts, setOccupancyAmounts] = useState({});
   const [emergencyShelterChoices, setEmergencyShelterChoices] = useState({});
   const [user, setUser] = useState(null);
   const [notes, setNotes] = useState({});
@@ -106,8 +122,10 @@ export default function ResponderFeed() {
     load();
     const interval = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      request("/api/help-requests/responder/feed").then(setItems).catch(() => {});
-    }, 30000);
+      Promise.all([request("/api/help-requests/responder/feed"), request("/api/shelters/responder/all"), request("/api/shelters/responder/requests")])
+        .then(([feed, shelterList, shelterQueue]) => { setItems(feed); setShelters(shelterList); setShelterRequests(shelterQueue); })
+        .catch(() => {});
+    }, 15000);
     return () => window.clearInterval(interval);
   }, [load]);
 
@@ -162,8 +180,10 @@ export default function ResponderFeed() {
   }
 
   async function shelterDecision(item, status) {
+    const shelter_id = Number(shelterChoices[item.id] || item.preferred_shelter?.id || 0);
+    if (status === "Approved" && !shelter_id) { setError("Choose a shelter with enough capacity before accepting this request."); return; }
     setBusyId(`shelter-${item.id}`);
-    try { await request(`/api/shelters/requests/${item.id}/decision`, { method: "POST", body: JSON.stringify({ status }) }); await load(); }
+    try { await request(`/api/shelters/requests/${item.id}/decision`, { method: "POST", body: JSON.stringify({ status, ...(status === "Approved" ? { shelter_id } : {}) }) }); await load(); }
     catch (err) { setError(err.message); }
     finally { setBusyId(null); }
   }
@@ -177,9 +197,15 @@ export default function ResponderFeed() {
     finally { setBusyId(null); }
   }
 
-  async function adjustOccupancy(shelter, change) {
-    try { await request(`/api/shelters/${shelter.id}/occupancy?change=${change}`, { method: "POST" }); await load(); }
+  async function adjustOccupancy(shelter, direction) {
+    const quantity = Number(occupancyAmounts[shelter.id] || 1);
+    const change = direction * quantity;
+    if (!Number.isInteger(quantity) || quantity < 1 || (direction > 0 && quantity > shelter.available) || (direction < 0 && quantity > shelter.occupied)) { setError("Enter a valid headcount within the shelter's remaining capacity."); return; }
+    const busyKey = `capacity-${shelter.id}`;
+    setBusyId(busyKey);
+    try { await request(`/api/shelters/${shelter.id}/occupancy?change=${change}`, { method: "POST" }); setOccupancyAmounts(v => ({ ...v, [shelter.id]: "1" })); await load(); }
     catch (err) { setError(err.message); }
+    finally { setBusyId(null); }
   }
 
   async function assignEmergencyShelter(item) {
@@ -236,7 +262,7 @@ export default function ResponderFeed() {
       <div className="responder-meta"><span>People affected: <b>{item.people_affected}</b></span><span>Location: <b>{item.location_description}</b></span><span>Submitted: <b>{new Date(item.created_at).toLocaleString()}</b></span></div>
       {item.special_assistance&&<p className="responder-assistance"><b>Special assistance:</b> {item.special_assistance}</p>}
       {item.shelter_id&&<p className="responder-assistance"><b>Assigned shelter:</b> {shelters.find(s=>s.id===item.shelter_id)?.name||`Shelter #${item.shelter_id}`}</p>}
-      {owned&&!closed&&<div className="responder-card-footer emergency-shelter-assignment"><select aria-label="Assign this emergency to a shelter" value={emergencyShelterChoices[item.id]||item.shelter_id||""} onChange={e=>setEmergencyShelterChoices(v=>({...v,[item.id]:e.target.value}))}><option value="">Assign household to an in-coverage shelter</option>{shelters.filter(s=>s.can_assign&&s.available+(s.id===item.shelter_id?item.people_affected:0)>=item.people_affected).map(s=><option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.available} spaces</option>)}</select><button disabled={busyId===item.id} onClick={()=>assignEmergencyShelter(item)}>{item.shelter_id?"Change shelter":"Assign shelter"}</button></div>}
+      {owned&&!closed&&<div className="responder-card-footer emergency-shelter-assignment"><select aria-label="Assign this emergency to a shelter" value={emergencyShelterChoices[item.id]||item.shelter_id||""} onChange={e=>setEmergencyShelterChoices(v=>({...v,[item.id]:e.target.value}))}><option value="">Assign household to an in-coverage shelter</option>{shelters.filter(s=>s.is_active&&s.can_assign&&s.available+(s.id===item.shelter_id?item.people_affected:0)>=item.people_affected).map(s=><option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.available} spaces</option>)}</select><button disabled={busyId===item.id} onClick={()=>assignEmergencyShelter(item)}>{item.shelter_id?"Change shelter":"Assign shelter"}</button></div>}
       {owned&&!closed&&<div className="responder-actions"><label>Response notes<textarea value={notes[item.id]??item.responder_notes??""} onChange={e=>setNotes(prev=>({...prev,[item.id]:e.target.value}))} placeholder="Share an update with the citizen"/><small className="responder-note-hint">Saved notes appear in the citizen’s request tracker.</small><button className="responder-save-note" disabled={busyId===item.id||(notes[item.id]??item.responder_notes??"")===(item.responder_notes??"")} onClick={()=>update(item,item.status)}>{busyId===item.id?"Saving…":"Save update"}</button></label><label>Update status<select value={item.status} onChange={e=>update(item,e.target.value)} disabled={busyId===item.id}>{["Assigned","In Progress","Resolved","Rejected"].map(status=><option key={status}>{status}</option>)}</select></label></div>}
       {owned&&<><button className="responder-conversation-toggle" type="button" onClick={()=>setOpenConversationId(openConversationId===item.id?null:item.id)}>{openConversationId===item.id?"Close conversation":"Open citizen conversation"}</button>{openConversationId===item.id&&<HelpRequestConversation requestId={item.id} role="responder" closed={closed}/>}</>}
       {!closed&&<div className="responder-card-footer">{item.assigned_responder_id ? <span>{owned?"Assigned to you":"Assigned to another responder"}</span> : <button disabled={busyId===item.id} onClick={()=>claim(item)}>{busyId===item.id?"Claiming…":"Claim report"}</button>}</div>}
@@ -246,9 +272,9 @@ export default function ResponderFeed() {
   const renderShelterOperations = <>
     <section className="responder-resources shelter-ops">
       <div className="responder-feed-heading"><div><h2>Shelter requests</h2><p>Review requests and coordinate available beds in your coverage area.</p></div><span>{pendingShelters} awaiting review</span></div>
-      {loading ? <p className="responder-empty">Loading shelter requests…</p> : !shelterRequests.length ? <p className="responder-empty">No shelter requests in your coverage areas.</p> : <div className="responder-cards">{shelterRequests.map(item=><article className="responder-card" key={`shelter-request-${item.id}`}><div className="responder-card-top"><div><span className="responder-loc">{item.lac} · {item.district}</span><h3>{item.household_name} · {item.people_count} people</h3></div><span className="responder-status">{item.status}</span></div><p>Preferred: <b>{item.preferred_shelter?.name}</b> · Contact {item.phone} · Aadhaar ending {item.aadhaar_last4}</p>{item.special_needs&&<p><b>Needs:</b> {item.special_needs}</p>}{item.assigned_shelter&&<p>Assigned to <b>{item.assigned_shelter.name}</b></p>}{item.status==="Pending"&&<div className="responder-card-footer"><button disabled={busyId===`shelter-${item.id}`} onClick={()=>shelterDecision(item,"Approved")}>Approve request</button><button className="shelter-reject" disabled={busyId===`shelter-${item.id}`} onClick={()=>shelterDecision(item,"Rejected")}>Reject</button></div>}{["Approved","Assigned"].includes(item.status)&&<div className="responder-card-footer"><select aria-label="Choose shelter in your jurisdiction" value={shelterChoices[item.id]||item.assigned_shelter?.id||""} onChange={e=>setShelterChoices(v=>({...v,[item.id]:e.target.value}))}><option value="">Choose an in-coverage shelter</option>{shelters.filter(s=>s.can_assign&&s.available+(s.id===item.assigned_shelter?.id?item.people_count:0)>=item.people_count).map(s=><option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.available} spaces</option>)}</select><button disabled={busyId===`shelter-${item.id}`} onClick={()=>assignShelter(item)}>{item.assigned_shelter?"Update assignment":"Assign shelter"}</button></div>}</article>)}</div>}
+      {loading ? <p className="responder-empty">Loading shelter requests…</p> : !shelterRequests.length ? <p className="responder-empty">No shelter requests in your coverage areas.</p> : <div className="responder-cards">{shelterRequests.map(item=><article className="responder-card" key={`shelter-request-${item.id}`}><div className="responder-card-top"><div><span className="responder-loc">{item.lac} · {item.district}</span><h3>{item.household_name} · {item.people_count} people</h3></div><span className="responder-status">{item.status}</span></div><p>Preferred: <b>{item.preferred_shelter?.name}</b> · Contact {item.phone} · Aadhaar ending {item.aadhaar_last4}</p>{item.citizen_location&&<p><b>Request location:</b> {item.citizen_location}{item.latitude&&item.longitude&&<> · <a href={`https://www.google.com/maps?q=${item.latitude},${item.longitude}`} target="_blank" rel="noreferrer">Open citizen location ↗</a></>}</p>}{item.reason&&<p><b>Reason:</b> {item.reason}</p>}{item.id_photo_available&&<ShelterRequestPhoto requestId={item.id}/>}{item.special_needs&&<p><b>Needs:</b> {item.special_needs}</p>}{item.assigned_shelter&&<p>Assigned to <b>{item.assigned_shelter.name}</b> · Capacity {item.assigned_shelter.occupied}/{item.assigned_shelter.capacity} · <a href={`https://www.google.com/maps?q=${item.assigned_shelter.latitude},${item.assigned_shelter.longitude}`} target="_blank" rel="noreferrer">Open shelter map ↗</a></p>}{item.status==="Pending"&&<div className="responder-card-footer"><select aria-label="Choose a shelter for this household" value={shelterChoices[item.id]||item.preferred_shelter?.id||""} onChange={e=>setShelterChoices(v=>({...v,[item.id]:e.target.value}))}><option value="">Choose an in-coverage shelter</option>{shelters.filter(s=>s.is_active&&s.can_assign&&s.available>=item.people_count).map(s=><option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.available}/{s.capacity} spaces</option>)}</select><button disabled={busyId===`shelter-${item.id}`||!shelters.some(s=>s.id===Number(shelterChoices[item.id]||item.preferred_shelter?.id)&&s.is_active&&s.can_assign&&s.available>=item.people_count)} onClick={()=>shelterDecision(item,"Approved")}>Accept and assign</button><button className="shelter-reject" disabled={busyId===`shelter-${item.id}`} onClick={()=>shelterDecision(item,"Rejected")}>Reject</button></div>}{["Approved","Assigned"].includes(item.status)&&<div className="responder-card-footer"><select aria-label="Choose shelter in your jurisdiction" value={shelterChoices[item.id]||item.assigned_shelter?.id||""} onChange={e=>setShelterChoices(v=>({...v,[item.id]:e.target.value}))}><option value="">Choose an in-coverage shelter</option>{shelters.filter(s=>s.is_active&&s.can_assign&&s.available+(s.id===item.assigned_shelter?.id?item.people_count:0)>=item.people_count).map(s=><option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.available} spaces</option>)}</select><button disabled={busyId===`shelter-${item.id}`} onClick={()=>assignShelter(item)}>{item.assigned_shelter?"Update assignment":"Assign shelter"}</button></div>}</article>)}</div>}
     </section>
-    <section className="responder-resources shelter-ops"><div className="responder-feed-heading"><div><h2>Shelter directory</h2><p>Capacity and occupancy in your operational area.</p></div></div><div className="responder-resource-grid">{shelters.map(s=><article className="responder-resource-card" key={`shelter-${s.id}`}><div className="responder-card-top"><div><span className="responder-loc">{s.district} · {s.lac}</span><h3>{s.name}</h3></div><span className="responder-stock-count">{s.occupied}/{s.capacity}</span></div><p>{s.building_type} · {s.address}<br/>{s.available} spaces available</p>{s.can_assign?<div className="shelter-counter"><button disabled={s.occupied<=0} onClick={()=>adjustOccupancy(s,-1)} aria-label={`Remove one person from ${s.name}`}>−</button><span>Update headcount</span><button disabled={s.occupied>=s.capacity} onClick={()=>adjustOccupancy(s,1)} aria-label={`Add one person to ${s.name}`}>+</button></div>:<small>Outside your assigned jurisdiction</small>}</article>)}</div></section>
+    <section className="responder-resources shelter-ops"><div className="responder-feed-heading"><div><h2>Shelter directory</h2><p>Capacity and occupancy in your operational area.</p></div></div><div className="responder-resource-grid">{shelters.map(s=><article className="responder-resource-card" key={`shelter-${s.id}`}><div className="responder-card-top"><div><span className="responder-loc">{s.district} · {s.lac}</span><h3>{s.name}</h3></div><span className="responder-stock-count">{s.is_active?"Active":"Inactive"} · {s.occupied}/{s.capacity}</span></div><p>{s.building_type} · {s.address}<br/>{s.available} spaces available</p>{s.can_assign?<div className="shelter-counter"><label>People to update<input type="number" min="1" max={s.capacity} value={occupancyAmounts[s.id]??"1"} onChange={e=>setOccupancyAmounts(v=>({...v,[s.id]:e.target.value}))}/></label><button disabled={busyId===`capacity-${s.id}`||s.occupied<=0} onClick={()=>adjustOccupancy(s,-1)} aria-label={`Remove people from ${s.name}`}>Remove</button><button disabled={busyId===`capacity-${s.id}`||!s.is_active||s.occupied>=s.capacity} onClick={()=>adjustOccupancy(s,1)} aria-label={`Add people to ${s.name}`}>Add people</button></div>:<small>Outside your assigned jurisdiction</small>}</article>)}</div></section>
   </>;
 
   const renderResources = <section className="responder-resources responder-resource-module">

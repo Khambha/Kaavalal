@@ -359,7 +359,7 @@ function App() {
       .then(response => { if (active) setShelters(response.data || []); })
       .catch(() => { /* Keep the last public shelter list during brief API outages. */ });
     loadShelters();
-    const interval = window.setInterval(loadShelters, 30000);
+    const interval = window.setInterval(loadShelters, 15000);
     window.addEventListener("focus", loadShelters);
     return () => {
       active = false;

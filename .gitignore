@@ -43,3 +43,4 @@ __pycache__/
 # Frontend build output
 node_modules/
 dist/
+backend/app/data/*_geocode_cache.json

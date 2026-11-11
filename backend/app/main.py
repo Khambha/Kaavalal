@@ -12,7 +12,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.alert import Alert
 from app.models.resource_item import ResourceItem
 from app.models.resource_transaction import ResourceTransaction
-from app.models.shelter import Shelter, ShelterRequest, RequestStatusEvent
+from app.models.shelter import Shelter, ShelterCandidate, ShelterRequest, RequestStatusEvent
 from app.routers.help_requests import router as help_requests_router
 
 from app.core.database import Base, engine
@@ -131,6 +131,16 @@ with engine.begin() as connection:
         connection.execute(text("ALTER TABLE shelter_requests ADD COLUMN client_request_id VARCHAR(36) NULL"))
     if "eta_estimate_minutes" not in shelter_request_columns:
         connection.execute(text("ALTER TABLE shelter_requests ADD COLUMN eta_estimate_minutes INTEGER NULL"))
+    if "citizen_location" not in shelter_request_columns:
+        connection.execute(text("ALTER TABLE shelter_requests ADD COLUMN citizen_location VARCHAR(500) NULL"))
+    if "latitude" not in shelter_request_columns:
+        connection.execute(text("ALTER TABLE shelter_requests ADD COLUMN latitude FLOAT NULL"))
+    if "longitude" not in shelter_request_columns:
+        connection.execute(text("ALTER TABLE shelter_requests ADD COLUMN longitude FLOAT NULL"))
+    if "reason" not in shelter_request_columns:
+        connection.execute(text("ALTER TABLE shelter_requests ADD COLUMN reason TEXT NULL"))
+    if "id_photo_path" not in shelter_request_columns:
+        connection.execute(text("ALTER TABLE shelter_requests ADD COLUMN id_photo_path VARCHAR(255) NULL"))
 shelter_request_indexes = inspect(engine).get_indexes("shelter_requests")
 has_unique_shelter_request_id = any(
     index.get("unique") and "client_request_id" in index.get("column_names", [])
@@ -139,6 +149,30 @@ has_unique_shelter_request_id = any(
 if not has_unique_shelter_request_id:
     with engine.begin() as connection:
         connection.execute(text("CREATE UNIQUE INDEX uq_shelter_requests_client_request_id ON shelter_requests (client_request_id)"))
+
+# Preserve source provenance and the admin review state for imported shelter candidates.
+shelter_columns = {column["name"] for column in inspect(engine).get_columns("shelters")}
+with engine.begin() as connection:
+    if "source_key" not in shelter_columns:
+        connection.execute(text("ALTER TABLE shelters ADD COLUMN source_key VARCHAR(120) NULL"))
+    if "source_name" not in shelter_columns:
+        connection.execute(text("ALTER TABLE shelters ADD COLUMN source_name VARCHAR(100) NULL"))
+    if "source_row" not in shelter_columns:
+        connection.execute(text("ALTER TABLE shelters ADD COLUMN source_row INTEGER NULL"))
+    if "needs_review" not in shelter_columns:
+        connection.execute(text("ALTER TABLE shelters ADD COLUMN needs_review BOOLEAN NOT NULL DEFAULT 0"))
+    if "lac_assignment_method" not in shelter_columns:
+        connection.execute(text("ALTER TABLE shelters ADD COLUMN lac_assignment_method VARCHAR(40) NULL"))
+    if "lac_distance_km" not in shelter_columns:
+        connection.execute(text("ALTER TABLE shelters ADD COLUMN lac_distance_km FLOAT NULL"))
+shelter_indexes = inspect(engine).get_indexes("shelters")
+has_unique_shelter_source_key = any(
+    index.get("unique") and "source_key" in index.get("column_names", [])
+    for index in shelter_indexes
+)
+if not has_unique_shelter_source_key:
+    with engine.begin() as connection:
+        connection.execute(text("CREATE UNIQUE INDEX uq_shelters_source_key ON shelters (source_key)"))
 
 
 # Register existing routers
