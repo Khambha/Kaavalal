@@ -7,10 +7,7 @@ const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 const services = [
   ["sos", "Emergency / SOS response", "Send an urgent request with your location and household needs.", "SOS"],
   ["dashboard", "Citizen dashboard", "Weather, risk indicators, and local exposure information.", "▦"],
-  ["help", "Report an incident", "Send a non-emergency incident report to your local response team.", "⌖"],
-  ["alerts", "Disaster alerts", "Read current official alerts published by administrators.", "◉"],
   ["shelter", "Find nearby shelter", "View locations, capacity, and request household shelter.", "⌂"],
-  ["dashboard", "Disaster map", "Explore Kerala risk layers, constituencies, and shelter pins.", "◇"],
 ];
 
 export default function CitizenPortal({ onNavigate, selectedLac, selectedDistrict, language = "en" }) {
