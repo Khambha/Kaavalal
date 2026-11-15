@@ -180,6 +180,10 @@ def coverage_has(coverage, district, lac):
     return any(d.casefold() == district.casefold() and l.casefold() == lac.casefold() for d, l in coverage)
 
 
+def coverage_has_district(coverage, district):
+    return any(d.strip().casefold() == str(district or "").strip().casefold() for d, _ in coverage)
+
+
 @admin_router.get("")
 def admin_list(db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
     if admin.must_change_password:
@@ -298,7 +302,7 @@ def create_request(data: ShelterRequestCreate, db: Session = Depends(get_db), us
 def require_shelter_request_access(row, db, user):
     if row.citizen_id == user.id:
         return
-    if user.role in {"responder", "rescuer"} and coverage_has(responder_coverage_query(db, user), row.district, row.lac):
+    if user.role in {"responder", "rescuer"} and coverage_has_district(responder_coverage_query(db, user), row.district):
         return
     raise HTTPException(status_code=403, detail="You cannot access this shelter request.")
 
@@ -358,7 +362,7 @@ def my_shelter_request_history(request_id: int, db: Session = Depends(get_db), u
     if not row:
         raise HTTPException(status_code=404, detail="Shelter request not found.")
     if row.citizen_id != user.id:
-        if user.role not in {"responder", "rescuer"} or not coverage_has(responder_coverage_query(db, user), row.district, row.lac):
+        if user.role not in {"responder", "rescuer"} or not coverage_has_district(responder_coverage_query(db, user), row.district):
             raise HTTPException(status_code=403, detail="You cannot access this request history.")
     events = db.query(RequestStatusEvent).filter(RequestStatusEvent.shelter_request_id == row.id).order_by(RequestStatusEvent.created_at.asc(), RequestStatusEvent.id.asc()).all()
     return [event_public(event) for event in events]
@@ -370,7 +374,10 @@ def responder_requests(db: Session = Depends(get_db), user: User = Depends(get_c
     coverage = responder_coverage_query(db, user)
     if not coverage:
         return []
-    clauses = [((ShelterRequest.district.ilike(d)) & (ShelterRequest.lac.ilike(l))) for d, l in coverage]
+    districts = sorted({district.strip() for district, _ in coverage if district and district.strip()})
+    if not districts:
+        return []
+    clauses = [ShelterRequest.district.ilike(district) for district in districts]
     rows = db.query(ShelterRequest).filter(or_(*clauses)).order_by(ShelterRequest.created_at.desc()).all()
     return [request_public(r, db) for r in rows]
 
@@ -380,7 +387,7 @@ def responder_shelters(db: Session = Depends(get_db), user: User = Depends(get_c
     require_responder(user)
     coverage = responder_coverage_query(db, user)
     rows = db.query(Shelter).order_by(Shelter.district, Shelter.name).all()
-    return [shelter_public(s, coverage_has(coverage, s.district, s.lac)) for s in rows]
+    return [shelter_public(s, coverage_has_district(coverage, s.district)) for s in rows]
 
 
 @router.post("/requests/{request_id}/decision")
@@ -390,8 +397,8 @@ def decide_request(request_id: int, data: RequestDecision, db: Session = Depends
     if not row:
         raise HTTPException(status_code=404, detail="Shelter request not found.")
     coverage = responder_coverage_query(db, user)
-    if not coverage_has(coverage, row.district, row.lac):
-        raise HTTPException(status_code=403, detail="This request is outside your assigned LAC coverage.")
+    if not coverage_has_district(coverage, row.district):
+        raise HTTPException(status_code=403, detail="This request is outside your assigned district coverage.")
     if row.status != "Pending":
         raise HTTPException(status_code=409, detail="This request has already been reviewed.")
     assigned_shelter = None
@@ -400,8 +407,8 @@ def decide_request(request_id: int, data: RequestDecision, db: Session = Depends
         assigned_shelter = db.query(Shelter).filter(Shelter.id == shelter_id, Shelter.is_active == 1).with_for_update().first()
         if not assigned_shelter:
             raise HTTPException(status_code=409, detail="Choose an active shelter for this household.")
-        if not coverage_has(coverage, assigned_shelter.district, assigned_shelter.lac):
-            raise HTTPException(status_code=403, detail="You can only assign people to shelters in your LAC coverage.")
+        if not coverage_has_district(coverage, assigned_shelter.district) or assigned_shelter.district.strip().casefold() != row.district.strip().casefold():
+            raise HTTPException(status_code=403, detail="Choose a shelter in the request's district.")
         if assigned_shelter.capacity - assigned_shelter.occupied < row.people_count:
             raise HTTPException(status_code=409, detail="This shelter no longer has enough space. Choose another in-coverage shelter.")
         assigned_shelter.occupied += row.people_count
@@ -425,8 +432,10 @@ def assign_request(request_id: int, data: AssignShelter, db: Session = Depends(g
     if not row or not shelter:
         raise HTTPException(status_code=404, detail="Request or shelter not found.")
     coverage = responder_coverage_query(db, user)
-    if not coverage_has(coverage, shelter.district, shelter.lac):
-        raise HTTPException(status_code=403, detail="You can only assign people to shelters in your LAC coverage.")
+    if not coverage_has_district(coverage, row.district):
+        raise HTTPException(status_code=403, detail="This request is outside your assigned district coverage.")
+    if shelter.district.strip().casefold() != row.district.strip().casefold():
+        raise HTTPException(status_code=403, detail="Choose a shelter in the request's district.")
     if row.status not in {"Approved", "Assigned"}:
         raise HTTPException(status_code=409, detail="Approve this shelter request before assigning a shelter.")
     current_shelter = db.get(Shelter, row.assigned_shelter_id) if row.assigned_shelter_id else None
@@ -457,8 +466,8 @@ def change_occupancy(shelter_id: int, change: int, db: Session = Depends(get_db)
     if not shelter:
         raise HTTPException(status_code=404, detail="Shelter not found.")
     coverage = responder_coverage_query(db, user)
-    if not coverage_has(coverage, shelter.district, shelter.lac):
-        raise HTTPException(status_code=403, detail="You can only update shelters in your LAC coverage.")
+    if not coverage_has_district(coverage, shelter.district):
+        raise HTTPException(status_code=403, detail="You can only update shelters in your assigned districts.")
     if change > 0 and not shelter.is_active:
         raise HTTPException(status_code=409, detail="This shelter is inactive and cannot accept more people.")
     if change == 0 or shelter.occupied + change < 0 or shelter.occupied + change > shelter.capacity:
