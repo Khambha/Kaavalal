@@ -12,7 +12,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.alert import Alert
 from app.models.resource_item import ResourceItem
 from app.models.resource_transaction import ResourceTransaction
-from app.models.shelter import Shelter, ShelterCandidate, ShelterRequest, RequestStatusEvent
+from app.models.shelter import Shelter, ShelterRequest, RequestStatusEvent
 from app.routers.help_requests import router as help_requests_router
 
 from app.core.database import Base, engine

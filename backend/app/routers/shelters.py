@@ -14,7 +14,7 @@ from app.core.database import get_db
 from app.models.admin_user import AdminUser
 from app.models.help_request import HelpRequest
 from app.models.responder_coverage import ResponderCoverage
-from app.models.shelter import Shelter, ShelterCandidate, ShelterRequest, RequestStatusEvent
+from app.models.shelter import Shelter, ShelterRequest, RequestStatusEvent
 from app.models.user import User
 from app.routers.admin_auth import get_current_admin
 from app.routers.auth import get_current_user
@@ -69,8 +69,6 @@ class AssignShelter(BaseModel):
 
 DISTRICT_BOUNDARIES = Path(__file__).resolve().parents[3] / "frontend" / "public" / "Data" / "Kerala_districts.geojson"
 SHELTER_REQUEST_UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads" / "shelter_requests"
-KSDMA_CAMP_CANDIDATES = Path(__file__).resolve().parents[1] / "data" / "ksdma_monsoon_shelter_candidates.json"
-AUDITORIUM_DEMO_CANDIDATES = Path(__file__).resolve().parents[1] / "data" / "auditorium_demo_candidates.json"
 SHELTER_REQUEST_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 MAX_ID_PHOTO_BYTES = 5 * 1024 * 1024
 ALLOWED_ID_PHOTO_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
@@ -159,24 +157,6 @@ def shelter_public(shelter, can_assign=None):
             **({"can_assign": can_assign} if can_assign is not None else {})}
 
 
-def shelter_candidate_public(candidate):
-    return {
-        "id": candidate.id, "source_key": candidate.source_key,
-        "source_name": candidate.source_name, "source_sheet": candidate.source_sheet,
-        "source_row": candidate.source_row, "name": candidate.name,
-        "district": candidate.district, "lsg": candidate.lsg, "address": candidate.address,
-        "suggested_latitude": candidate.suggested_latitude,
-        "suggested_longitude": candidate.suggested_longitude,
-        "geocode_confidence": candidate.geocode_confidence,
-        "geocode_match_type": candidate.geocode_match_type,
-        "geocode_result_name": candidate.geocode_result_name,
-        "geocode_result_address": candidate.geocode_result_address,
-        "geocode_result_url": candidate.geocode_result_url,
-        "geocode_note": candidate.geocode_note,
-        "capacity_confirmed": False, "review_status": candidate.review_status,
-    }
-
-
 def request_public(row, db):
     preferred = db.get(Shelter, row.preferred_shelter_id)
     assigned = db.get(Shelter, row.assigned_shelter_id) if row.assigned_shelter_id else None
@@ -205,108 +185,6 @@ def admin_list(db: Session = Depends(get_db), admin: AdminUser = Depends(get_cur
     if admin.must_change_password:
         raise HTTPException(status_code=403, detail="Change your temporary password before using the admin console.")
     return [shelter_public(s) for s in db.query(Shelter).order_by(Shelter.district, Shelter.name).all()]
-
-
-@admin_router.get("/auditorium-candidates")
-def admin_auditorium_candidates(db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
-    if admin.must_change_password:
-        raise HTTPException(status_code=403, detail="Change your temporary password before using the admin console.")
-    candidates = db.query(ShelterCandidate).order_by(ShelterCandidate.district, ShelterCandidate.name).all()
-    return [shelter_candidate_public(candidate) for candidate in candidates]
-
-
-@admin_router.post("/import-auditorium-demo")
-def admin_import_auditorium_demo(db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
-    if admin.must_change_password:
-        raise HTTPException(status_code=403, detail="Change your temporary password before using the admin console.")
-    try:
-        with AUDITORIUM_DEMO_CANDIDATES.open("r", encoding="utf-8") as stream:
-            payload = json.load(stream)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=503, detail="The prepared auditorium demo candidate file is unavailable or invalid.") from exc
-
-    entries = payload.get("candidates", [])
-    existing_keys = {row[0] for row in db.query(ShelterCandidate.source_key).all()}
-    pending = []
-    already_imported = 0
-    for item in entries:
-        source_key = item.get("source_key")
-        if not source_key or source_key in existing_keys:
-            already_imported += 1
-            continue
-        latitude = item.get("suggested_latitude")
-        longitude = item.get("suggested_longitude")
-        if latitude is None or longitude is None or item.get("geocode_confidence") not in {"high", "medium"}:
-            continue
-        if not _coordinate_in_district(latitude, longitude, item["district"]):
-            continue
-        pending.append(ShelterCandidate(
-            source_key=source_key, source_name=item["source_name"],
-            source_sheet=item["source_sheet"], source_row=item["source_row"],
-            name=item["name"], district=item["district"], lsg=item.get("lsg") or "",
-            address=item.get("address") or "", suggested_latitude=latitude,
-            suggested_longitude=longitude, geocode_confidence=item["geocode_confidence"],
-            geocode_match_type=item["geocode_match_type"],
-            geocode_result_name=item.get("geocode_result_name"),
-            geocode_result_address=item.get("geocode_result_address"),
-            geocode_result_url=item.get("geocode_result_osm_url"),
-            geocode_note=item.get("geocode_note") or "Verify this map suggestion with the facility.",
-            review_status="Pending",
-        ))
-        existing_keys.add(source_key)
-    try:
-        db.add_all(pending)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    return {
-        "imported": len(pending), "already_imported": already_imported,
-        "districts": len({item["district"] for item in entries}),
-        "message": "Added as review-only facility candidates. No capacity was supplied, so none can accept requests.",
-    }
-
-
-@admin_router.post("/import-ksdma-camps")
-def admin_import_ksdma_camps(db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
-    if admin.must_change_password:
-        raise HTTPException(status_code=403, detail="Change your temporary password before using the admin console.")
-    try:
-        with KSDMA_CAMP_CANDIDATES.open("r", encoding="utf-8") as stream:
-            payload = json.load(stream)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=503, detail="The prepared KSDMA camp candidate file is unavailable or invalid.") from exc
-
-    candidates = payload.get("candidates", [])
-    existing_keys = {row[0] for row in db.query(Shelter.source_key).filter(Shelter.source_key.isnot(None)).all()}
-    pending = []
-    already_imported = 0
-    for item in candidates:
-        source_key = item.get("source_key")
-        if not source_key or source_key in existing_keys:
-            already_imported += 1
-            continue
-        pending.append(Shelter(
-            name=item["name"], building_type=item["building_type"], district=item["district"],
-            lac=item["lac"], address=item["address"], latitude=item["latitude"],
-            longitude=item["longitude"], capacity=item["capacity"], occupied=0, is_active=False,
-            source_key=source_key, source_name=item.get("source_name"), source_row=item.get("source_row"),
-            needs_review=True, lac_assignment_method=item.get("lac_assignment_method"),
-            lac_distance_km=item.get("lac_distance_km"),
-        ))
-        existing_keys.add(source_key)
-    try:
-        db.add_all(pending)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    return {
-        "imported": len(pending), "already_imported": already_imported,
-        "source_rows": payload.get("source_rows"),
-        "excluded_counts": payload.get("excluded_counts", {}),
-        "message": "Imported as inactive shelter candidates. Review each assigned LAC before activating.",
-    }
 
 
 @admin_router.post("/validate-location")

@@ -28,30 +28,6 @@ class Shelter(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-class ShelterCandidate(Base):
-    __tablename__ = "shelter_candidates"
-
-    id = Column(Integer, primary_key=True, index=True)
-    source_key = Column(String(140), nullable=False, unique=True)
-    source_name = Column(String(100), nullable=False)
-    source_sheet = Column(String(40), nullable=False)
-    source_row = Column(Integer, nullable=False)
-    name = Column(String(200), nullable=False)
-    district = Column(String(100), nullable=False, index=True)
-    lsg = Column(String(150), nullable=False)
-    address = Column(String(500), nullable=False)
-    suggested_latitude = Column(Float, nullable=True)
-    suggested_longitude = Column(Float, nullable=True)
-    geocode_confidence = Column(String(20), nullable=False)
-    geocode_match_type = Column(String(50), nullable=False)
-    geocode_result_name = Column(String(200), nullable=True)
-    geocode_result_address = Column(String(500), nullable=True)
-    geocode_result_url = Column(String(500), nullable=True)
-    geocode_note = Column(Text, nullable=False)
-    review_status = Column(String(30), nullable=False, default="Pending")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-
 class ShelterRequest(Base):
     __tablename__ = "shelter_requests"
 

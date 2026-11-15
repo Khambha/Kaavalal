@@ -119,15 +119,13 @@ function Resources({setError}) {
 
 function Shelters({setError}) {
   const [items,refresh]=useLoad("/api/admin/shelters",setError);
-  const [candidateItems,refreshCandidates]=useLoad("/api/admin/shelters/auditorium-candidates",setError);
   const [districts,setDistricts]=useState([]); const [lacs,setLacs]=useState([]); const [busy,setBusy]=useState(false);
   const [success,setSuccess]=useState(""); const [locationCheck,setLocationCheck]=useState(null);
   const [editingId,setEditingId]=useState(null); const [districtFilter,setDistrictFilter]=useState("");
-  const [reviewOnly,setReviewOnly]=useState(false); const [currentPage,setCurrentPage]=useState(1); const [importing,setImporting]=useState(false);
-  const [candidatePage,setCandidatePage]=useState(1); const [importingAuditoriums,setImportingAuditoriums]=useState(false);
+  const [reviewOnly,setReviewOnly]=useState(false); const [currentPage,setCurrentPage]=useState(1);
   const pageSize=25;
   const [form,setForm]=useState({name:"",building_type:"School",district:"",lac:"",address:"",latitude:"",latitude_hemisphere:"N",longitude:"",longitude_hemisphere:"E",capacity:"",is_active:true});
-  useEffect(()=>{const interval=window.setInterval(()=>{refresh();refreshCandidates();},15000);return()=>window.clearInterval(interval);},[refresh,refreshCandidates]);
+  useEffect(()=>{const interval=window.setInterval(refresh,15000);return()=>window.clearInterval(interval);},[refresh]);
   useEffect(()=>{api("/api/help-requests/districts").then(d=>setDistricts(d.districts||[])).catch(e=>setError(e.message));},[]);
   useEffect(()=>{let live=true;if(!form.district){setLacs([]);return()=>{live=false;};}api(`/api/help-requests/lacs/${encodeURIComponent(form.district)}`).then(d=>live&&setLacs(d.lacs||[])).catch(e=>live&&setError(e.message));return()=>{live=false;};},[form.district]);
   function locate(){if(!navigator.geolocation){setError("Location access is unavailable in this browser.");return;}navigator.geolocation.getCurrentPosition(p=>{setLocationCheck(null);setForm(v=>({...v,latitude:Math.abs(p.coords.latitude).toFixed(6),latitude_hemisphere:p.coords.latitude<0?"S":"N",longitude:Math.abs(p.coords.longitude).toFixed(6),longitude_hemisphere:p.coords.longitude<0?"W":"E"}));},()=>setError("Could not read location. Enter latitude and longitude manually."),{enableHighAccuracy:true,timeout:10000});}
@@ -137,18 +135,6 @@ function Shelters({setError}) {
   async function checkLocation(){setError("");setLocationCheck({valid:null,message:"Checking the pin against the selected district…"});const point=signedCoordinates();if(form.latitude_hemisphere!=="N"||form.longitude_hemisphere!=="E"||point.latitude<8||point.latitude>13||point.longitude<74||point.longitude>78){const message="Shelter locations must be in Kerala (8–13° N, 74–78° E). Check the coordinate order and hemisphere.";setLocationCheck({valid:false,message});setError(message);return false;}try{await api("/api/admin/shelters/validate-location",{method:"POST",body:JSON.stringify({...point,district:form.district,lac:form.lac})});setLocationCheck({valid:true,message:`Pin is inside ${form.district} district and ${form.lac} LAC.`});return true;}catch(e){setLocationCheck({valid:false,message:e.message});setError(e.message);return false;}}
   async function create(e){e.preventDefault();setError("");setSuccess("");const valid=await checkLocation();if(!valid)return;const point=signedCoordinates();const wasEditing=Boolean(editingId);setBusy(true);try{const path=wasEditing?`/api/admin/shelters/${editingId}`:"/api/admin/shelters";const created=await api(path,{method:wasEditing?"PATCH":"POST",body:JSON.stringify({...form,name:form.name.trim(),address:form.address.trim(),...point,capacity:Number(form.capacity)})});resetForm();refresh();setSuccess(wasEditing?`${created.name} was updated.`:`${created.name} was added.`);}catch(e){setError(e.message);setLocationCheck({valid:false,message:e.message});}finally{setBusy(false);}}
   async function toggle(item){try{await api(`/api/admin/shelters/${item.id}/active?is_active=${!item.is_active}`,{method:"PATCH"});refresh();}catch(e){setError(e.message);}}
-  async function importCamps(){
-    if(!window.confirm("Import the prepared KSDMA camp records as inactive candidates? Every imported camp will require admin review before it can accept citizen requests."))return;
-    setImporting(true);setError("");setSuccess("");
-    try{const result=await api("/api/admin/shelters/import-ksdma-camps",{method:"POST"});refresh();setReviewOnly(true);setCurrentPage(1);setSuccess(`${result.imported} camp candidates imported; ${result.already_imported} were already present. ${result.message}`);}
-    catch(e){setError(e.message);}finally{setImporting(false);}
-  }
-  async function importAuditoriumDemo(){
-    if(!window.confirm("Add two high-confidence auditorium map suggestions from each district as review-only candidates? Capacity is unknown, so these will not be active shelters."))return;
-    setImportingAuditoriums(true);setError("");setSuccess("");
-    try{const result=await api("/api/admin/shelters/import-auditorium-demo",{method:"POST"});refreshCandidates();setCandidatePage(1);setSuccess(`${result.imported} auditorium demo candidates added; ${result.already_imported} were already present. ${result.message}`);}
-    catch(e){setError(e.message);}finally{setImportingAuditoriums(false);}
-  }
   async function markReviewed(item){
     if(!window.confirm(`Confirm that you reviewed the map pin, district, LAC, and capacity for “${item.name}”?`))return;
     try{await api(`/api/admin/shelters/${item.id}/review`,{method:"PATCH"});refresh();setSuccess(`${item.name} marked as reviewed. It remains inactive until you switch it on.`);}
@@ -157,20 +143,16 @@ function Shelters({setError}) {
   const visibleItems=(items||[]).filter(item=>(!districtFilter||item.district===districtFilter)&&(!reviewOnly||item.needs_review));
   const pageCount=Math.max(1,Math.ceil(visibleItems.length/pageSize));
   const pageItems=visibleItems.slice((currentPage-1)*pageSize,currentPage*pageSize);
-  const auditoriumCandidates=(candidateItems||[]).filter(item=>!districtFilter||item.district===districtFilter);
-  const candidatePageSize=10;
-  const candidatePageCount=Math.max(1,Math.ceil(auditoriumCandidates.length/candidatePageSize));
-  const visibleCandidates=auditoriumCandidates.slice((candidatePage-1)*candidatePageSize,candidatePage*candidatePageSize);
   const districtStats=[...new Set((items||[]).map(item=>item.district))].filter(district=>!districtFilter||district===districtFilter).sort().map(district=>{
     const shelters=(items||[]).filter(item=>item.district===district);
     const confirmed=shelters.filter(item=>!item.needs_review);
     return {district,shelterCount:confirmed.length,candidateCount:shelters.filter(item=>item.needs_review).length,activeCount:confirmed.filter(item=>item.is_active).length,occupied:confirmed.reduce((sum,item)=>sum+item.occupied,0),capacity:confirmed.reduce((sum,item)=>sum+item.capacity,0)};
   });
   return <>
-    <div className="toolbar"><div><h2>Emergency shelters</h2><p>Manage shelter locations, capacity, and availability by district.</p></div><div className="shelter-toolbar-actions"><button className="secondary" disabled={importing} onClick={importCamps}>{importing?"Importing camps…":"Import KSDMA camps"}</button><button className="secondary" disabled={importingAuditoriums} onClick={importAuditoriumDemo}>{importingAuditoriums?"Adding demo…":"Add auditorium demo"}</button><span className="live"><i/>Admin controlled</span></div></div>
+    <div className="toolbar"><div><h2>Emergency shelters</h2><p>Manage shelter locations, capacity, and availability by district.</p></div><span className="live"><i/>Admin controlled</span></div>
     {success&&<div className="shelter-success" role="status">{success}</div>}
     <section className="shelter-district-summary" aria-label="Shelter totals by district">{districtStats.length?districtStats.map(item=><article className="shelter-district-card" key={item.district}><div><span>District</span><h3>{item.district}</h3></div><strong>{item.occupied}<small> / {item.capacity} confirmed spaces</small></strong><footer><span>{item.activeCount} active</span><span>{item.shelterCount} confirmed</span><span>{item.candidateCount} to review</span></footer></article>):<p className="panel empty">No shelters have been added yet.</p>}</section>
-    <div className="toolbar shelter-directory-toolbar"><div><h2>Shelter directory</h2><p>Choose a district to manage its shelters.</p></div><div className="inventory-filters"><label>District<select value={districtFilter} onChange={e=>{setDistrictFilter(e.target.value);setCurrentPage(1);setCandidatePage(1);}}><option value="">All districts</option>{districts.map(name=><option key={name}>{name}</option>)}</select></label><label className="inventory-toggle"><input type="checkbox" checked={reviewOnly} onChange={e=>{setReviewOnly(e.target.checked);setCurrentPage(1);}}/>Needs review only</label></div></div>
+    <div className="toolbar shelter-directory-toolbar"><div><h2>Shelter directory</h2><p>Choose a district to manage its shelters.</p></div><div className="inventory-filters"><label>District<select value={districtFilter} onChange={e=>{setDistrictFilter(e.target.value);setCurrentPage(1);}}><option value="">All districts</option>{districts.map(name=><option key={name}>{name}</option>)}</select></label><label className="inventory-toggle"><input type="checkbox" checked={reviewOnly} onChange={e=>{setReviewOnly(e.target.checked);setCurrentPage(1);}}/>Needs review only</label></div></div>
     <div className="columns admin-layout"><form className="panel form-panel shelter-form" onSubmit={create}><h3>{editingId?"Edit shelter details":"Add a shelter"}</h3>
       <label>Site name<input required minLength="2" value={form.name} onChange={e=>setForm(v=>({...v,name:e.target.value}))} placeholder="Municipal Stadium"/></label>
       <label>Building type<select value={form.building_type} onChange={e=>setForm(v=>({...v,building_type:e.target.value}))}>{["School","Relief camp","Stadium","Community hall","Religious building","Government building","College","Other"].map(x=><option key={x}>{x}</option>)}</select></label>
@@ -194,13 +176,6 @@ function Shelters({setError}) {
     </article>)}{items&&!visibleItems.length&&<div className="panel empty">No shelters match these filters. Add one here or clear the review filter.</div>}
     {visibleItems.length>pageSize&&<div className="shelter-pagination"><span>{visibleItems.length} shelters · page {currentPage} of {pageCount}</span><div><button className="secondary" disabled={currentPage<=1} onClick={()=>setCurrentPage(page=>Math.max(1,page-1))}>Previous</button><button className="secondary" disabled={currentPage>=pageCount} onClick={()=>setCurrentPage(page=>Math.min(pageCount,page+1))}>Next</button></div></div>}
     </div></div>
-    <section className="panel auditorium-candidate-panel">
-      <div className="panel-head"><div><h3>Auditorium demo candidates</h3><p>Two suggested locations per district. These are review records, not active shelters; capacity is not provided by the source.</p></div><span className="pill needs-review">{auditoriumCandidates.length} candidates</span></div>
-      {(!candidateItems||candidateItems.length===0)?<div className="candidate-empty"><p>No auditorium demo records have been added to this database yet.</p><button className="secondary" disabled={importingAuditoriums} onClick={importAuditoriumDemo}>{importingAuditoriums?"Adding demo…":"Add 28 demo candidates"}</button></div>:<>
-        <div className="table-scroll"><table><thead><tr><th>District / facility</th><th>Workbook location</th><th>Suggested map match</th><th>Confidence</th><th>Coordinates</th><th>Capacity / review</th></tr></thead><tbody>{visibleCandidates.map(item=><tr key={item.source_key}><td><b>{item.district}</b><small>{item.name}</small><small>{item.source_sheet} · row {item.source_row}</small></td><td>{item.address||"—"}<small>{item.lsg||"Local body not listed"}</small></td><td><b>{item.geocode_result_name||"—"}</b><small>{item.geocode_result_address||"No map address returned"}</small></td><td><span className={`pill ${item.geocode_confidence==="high"?"active":"needs-review"}`}>{item.geocode_confidence}</span></td><td>{item.suggested_latitude?.toFixed(5)}, {item.suggested_longitude?.toFixed(5)}<small>{item.geocode_result_url&&<a href={item.geocode_result_url} target="_blank" rel="noreferrer">Open OSM result ↗</a>}</small></td><td><b>Unconfirmed</b><small>Capacity required</small><small>{item.review_status}</small></td></tr>)}</tbody></table></div>
-        {auditoriumCandidates.length>candidatePageSize&&<div className="shelter-pagination"><span>{auditoriumCandidates.length} candidates · page {candidatePage} of {candidatePageCount}</span><div><button className="secondary" disabled={candidatePage<=1} onClick={()=>setCandidatePage(page=>Math.max(1,page-1))}>Previous</button><button className="secondary" disabled={candidatePage>=candidatePageCount} onClick={()=>setCandidatePage(page=>Math.min(candidatePageCount,page+1))}>Next</button></div></div>}
-      </>}
-    </section>
   </>;
 }
 function Organizations({setError}) {
