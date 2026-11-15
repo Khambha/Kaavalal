@@ -5,7 +5,9 @@ import { t, localeName } from "../services/i18n";
 import { queueOfflineRequest } from "../services/offlineQueue";
 
 const API = `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/api/shelters`;
-const token = () => localStorage.getItem("access_token") || localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+// `token` is the canonical key written by signin.jsx. Prefer it over the legacy
+// access_token key so an old session cannot override the account just signed in.
+const token = () => localStorage.getItem("token") || sessionStorage.getItem("token") || localStorage.getItem("access_token") || sessionStorage.getItem("access_token") || "";
 const blankForm = () => ({ shelter_id: "", household_name: "", aadhaar_last4: "", phone: "", people_count: "1", citizen_location: "", latitude: "", longitude: "", reason: "", special_needs: "" });
 
 export default function ShelterRequests({ shelters = [], language = "en" }) {

@@ -5,6 +5,7 @@
 .dashboard-ui .portal-nav button:hover,.dashboard-ui .portal-nav button.active{background:rgba(154,213,200,.18);border-color:rgba(154,213,200,.45);color:#fff}
 .dashboard-ui .portal-nav button.portal-sos{background:#a83c35;border-color:#c76b62;color:#fff}
 .dashboard-ui .portal-nav button.portal-language{font-family:var(--font-ml);color:#a9d9cf}
+.dashboard-ui .portal-nav button.portal-signout{border-color:rgba(255,183,169,.4);color:#ffd5cb}
 .dashboard-ui .system-status{flex:0 0 auto}
 .dashboard-ui .dashboard{flex:1;min-height:0}
 .dashboard-ui .citizen-view{min-height:0;flex:1;overflow-y:auto;background:var(--paper)}

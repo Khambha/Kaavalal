@@ -338,6 +338,9 @@ function App() {
   const [shelters, setShelters] = useState([]);
   const [activeView, setActiveView] = useState("citizen");
   const [language, setLanguage] = useState(localStorage.getItem("kaavalal_language") === "ml" ? "ml" : "en");
+  const [isSignedIn, setIsSignedIn] = useState(() => Boolean(
+    localStorage.getItem("token") || sessionStorage.getItem("token") || localStorage.getItem("access_token") || sessionStorage.getItem("access_token")
+  ));
 
   useEffect(() => {
     const nextView = routeLocation.state?.citizenView;
@@ -351,6 +354,16 @@ function App() {
       replace,
       state: { ...routeLocation.state, citizenView: view },
     });
+  }
+
+  function signOut() {
+    for (const storage of [localStorage, sessionStorage]) {
+      storage.removeItem("token");
+      storage.removeItem("access_token");
+      storage.removeItem("role");
+    }
+    setIsSignedIn(false);
+    navigate("/login", { replace: true });
   }
 
   useEffect(() => {
@@ -712,6 +725,7 @@ function App() {
           <button className={activeView === "dashboard" ? "active" : ""} onClick={() => navigateToView("dashboard")}>{t("Disaster Dashboard",language)}</button>
           <button className="portal-sos" onClick={() => navigateToView("sos")}>SOS</button>
           <button className="portal-language" onClick={() => { const next = language === "en" ? "ml" : "en"; setLanguage(next); localStorage.setItem("kaavalal_language",next); }} aria-label="Change language">{language === "en" ? "മലയാളം" : "English"}</button>
+          {isSignedIn && <button className="portal-signout" onClick={signOut}>Sign out</button>}
         </nav>
         <div className={`system-status ${apiClass}`} role="status">
           <span className="status-dot" aria-hidden="true" />

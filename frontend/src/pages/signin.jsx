@@ -30,6 +30,14 @@ export default function Signin() {
         throw new Error(detail || "Invalid email or password.");
       }
 
+      // Keep only the newly authenticated account. A previous token in the
+      // other storage area (or the legacy key) could otherwise be reused by
+      // shelter requests and submit under the wrong role.
+      for (const storage of [localStorage, sessionStorage]) {
+        storage.removeItem("token");
+        storage.removeItem("access_token");
+        storage.removeItem("role");
+      }
       const store = remember ? localStorage : sessionStorage;
       store.setItem("token", data.access_token);
       const profileResponse = await fetch(`${API_URL}/api/auth/me`, {
