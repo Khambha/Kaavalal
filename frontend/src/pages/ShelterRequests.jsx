@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import "./shelter-requests.css";
 import "./shelter-qr-modal.css";
 import "./shelter-directory.css";
@@ -38,7 +39,7 @@ function ShelterCheckinQr({ acceptanceId, name, peopleCount, shelterName }) {
 
   return <>
     <button type="button" className="shelter-qr-trigger" onClick={() => setOpen(true)}>Ticketed QR</button>
-    {open && <div className="shelter-qr-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false); }}>
+    {open && createPortal(<div className="shelter-qr-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false); }}>
       <section className="shelter-qr-dialog" role="dialog" aria-modal="true" aria-labelledby={`shelter-qr-title-${acceptanceId}`}>
         <button type="button" className="shelter-qr-close" onClick={() => setOpen(false)} aria-label="Close ticketed QR">×</button>
         <span className="shelter-qr-eyebrow">SHELTER CHECK-IN</span>
@@ -48,7 +49,7 @@ function ShelterCheckinQr({ acceptanceId, name, peopleCount, shelterName }) {
         <dl className="shelter-qr-details"><div><dt>Acceptance ID</dt><dd>{acceptanceId}</dd></div><div><dt>Name</dt><dd>{name}</dd></div><div><dt>People</dt><dd>{peopleCount}</dd></div></dl>
         <a className={`shelter-qr-download ${qrCode ? "" : "disabled"}`} href={qrCode || undefined} download={`${acceptanceId}.png`} aria-disabled={!qrCode}>Download QR code</a>
       </section>
-    </div>}
+    </div>, document.body)}
   </>;
 }
 
