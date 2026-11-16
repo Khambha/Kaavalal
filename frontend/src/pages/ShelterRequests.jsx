@@ -1,14 +1,56 @@
 import { useEffect, useState } from "react";
 import "./shelter-requests.css";
+import "./shelter-qr-modal.css";
 import "./shelter-directory.css";
 import { t, localeName } from "../services/i18n";
 import { queueOfflineRequest } from "../services/offlineQueue";
+import QRCode from "qrcode";
 
 const API = `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/api/shelters`;
 // `token` is the canonical key written by signin.jsx. Prefer it over the legacy
 // access_token key so an old session cannot override the account just signed in.
 const token = () => localStorage.getItem("token") || sessionStorage.getItem("token") || localStorage.getItem("access_token") || sessionStorage.getItem("access_token") || "";
 const blankForm = () => ({ shelter_id: "", household_name: "", aadhaar_last4: "", phone: "", people_count: "1", citizen_location: "", latitude: "", longitude: "", reason: "", special_needs: "" });
+
+function ShelterCheckinQr({ acceptanceId, name, peopleCount, shelterName }) {
+  const [qrCode, setQrCode] = useState("");
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const record = JSON.stringify({ acceptance_id: acceptanceId, name, people: peopleCount });
+    QRCode.toDataURL(record, { width: 220, margin: 2, errorCorrectionLevel: "M" })
+      .then(image => { if (active) setQrCode(image); })
+      .catch(() => { if (active) setQrCode(""); });
+    return () => { active = false; };
+  }, [acceptanceId, name, peopleCount]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnEscape = event => { if (event.key === "Escape") setOpen(false); };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return <>
+    <button type="button" className="shelter-qr-trigger" onClick={() => setOpen(true)}>Ticketed QR</button>
+    {open && <div className="shelter-qr-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false); }}>
+      <section className="shelter-qr-dialog" role="dialog" aria-modal="true" aria-labelledby={`shelter-qr-title-${acceptanceId}`}>
+        <button type="button" className="shelter-qr-close" onClick={() => setOpen(false)} aria-label="Close ticketed QR">×</button>
+        <span className="shelter-qr-eyebrow">SHELTER CHECK-IN</span>
+        <h2 id={`shelter-qr-title-${acceptanceId}`}>Ticketed QR</h2>
+        <p>Show this QR to the team at <b>{shelterName}</b>. Keep it private.</p>
+        {qrCode ? <img className="shelter-qr-image" src={qrCode} alt={`Ticketed QR for acceptance ${acceptanceId}`} /> : <span className="shelter-qr-loading">Preparing QR code…</span>}
+        <dl className="shelter-qr-details"><div><dt>Acceptance ID</dt><dd>{acceptanceId}</dd></div><div><dt>Name</dt><dd>{name}</dd></div><div><dt>People</dt><dd>{peopleCount}</dd></div></dl>
+        <a className={`shelter-qr-download ${qrCode ? "" : "disabled"}`} href={qrCode || undefined} download={`${acceptanceId}.png`} aria-disabled={!qrCode}>Download QR code</a>
+      </section>
+    </div>}
+  </>;
+}
 
 export default function ShelterRequests({ shelters = [], language = "en" }) {
   const [requests, setRequests] = useState([]);
@@ -106,6 +148,6 @@ export default function ShelterRequests({ shelters = [], language = "en" }) {
       <button disabled={busy || !available.length}>{busy ? "Sending request…" : "Submit shelter request"}</button><button type="button" className="shelter-history-toggle" onClick={saveOffline} disabled={busy}>Save on this device</button>
       {!available.length && <p>No active shelter with available space is listed in this district.</p>}
     </form>
-    <section className="shelter-my-requests"><h2>My shelter requests</h2>{requests.length ? requests.map(r => <article key={r.id}><div><b>{r.preferred_shelter?.name || `Shelter request #${r.id}`}</b><span>{r.lac} · {r.district}</span></div><strong className={`shelter-status ${r.status.toLowerCase()}`}>{t(r.status, language)}</strong><p>{r.people_count} people · Submitted {new Date(r.created_at).toLocaleString(localeName(language))}</p>{r.assigned_shelter && <div className="shelter-assignment-result"><b>Rescue team assigned: {r.assigned_shelter.name}</b><span>{r.assigned_shelter.address} · {r.assigned_shelter.lac}, {r.assigned_shelter.district}</span><span>Capacity: {r.assigned_shelter.occupied}/{r.assigned_shelter.capacity}</span><a href={`https://www.google.com/maps?q=${r.assigned_shelter.latitude},${r.assigned_shelter.longitude}`} target="_blank" rel="noreferrer">Open assigned shelter map ↗</a></div>}{r.status === "Rejected" && <p className="shelter-rejected-note">The rescue team could not accept this request. You can submit another request for a different active shelter.</p>}<p>Status: {t(r.status, language)}{r.eta_estimate_minutes ? ` · Estimated review: about ${r.eta_estimate_minutes} minutes (estimate only)` : ""}</p><button type="button" className="shelter-history-toggle" onClick={() => toggleHistory(r.id)}>{histories[r.id] ? "Hide status history" : "View status history"}</button>{histories[r.id] && <ol className="request-status-history">{histories[r.id].map(e => <li key={e.id}><b>{t(e.status, language)}</b><span>{e.note}</span><small>{new Date(e.created_at).toLocaleString(localeName(language))}</small></li>)}</ol>}</article>) : <p>Requests you submit will appear here with their review status.</p>}</section></div>
+    <section className="shelter-my-requests"><h2>My shelter requests</h2>{requests.length ? requests.map(r => <article key={r.id}><div><b>{r.preferred_shelter?.name || `Shelter request #${r.id}`}</b><span>{r.lac} · {r.district}</span></div><strong className={`shelter-status ${r.status.toLowerCase()}`}>{t(r.status, language)}</strong><p>{r.people_count} people · Submitted {new Date(r.created_at).toLocaleString(localeName(language))}</p>{r.assigned_shelter && <div className="shelter-assignment-result"><b>Rescue team assigned: {r.assigned_shelter.name}</b><span>{r.assigned_shelter.address} · {r.assigned_shelter.lac}, {r.assigned_shelter.district}</span><span>Capacity: {r.assigned_shelter.occupied}/{r.assigned_shelter.capacity}</span><a href={`https://www.google.com/maps?q=${r.assigned_shelter.latitude},${r.assigned_shelter.longitude}`} target="_blank" rel="noreferrer">Open assigned shelter map ↗</a></div>}{r.acceptance_id && r.assigned_shelter && <ShelterCheckinQr acceptanceId={r.acceptance_id} name={r.household_name} peopleCount={r.people_count} shelterName={r.assigned_shelter.name}/>}{r.status === "Rejected" && <p className="shelter-rejected-note">The rescue team could not accept this request. You can submit another request for a different active shelter.</p>}<p>Status: {t(r.status, language)}{r.eta_estimate_minutes ? ` · Estimated review: about ${r.eta_estimate_minutes} minutes (estimate only)` : ""}</p><button type="button" className="shelter-history-toggle" onClick={() => toggleHistory(r.id)}>{histories[r.id] ? "Hide status history" : "View status history"}</button>{histories[r.id] && <ol className="request-status-history">{histories[r.id].map(e => <li key={e.id}><b>{t(e.status, language)}</b><span>{e.note}</span><small>{new Date(e.created_at).toLocaleString(localeName(language))}</small></li>)}</ol>}</article>) : <p>Requests you submit will appear here with their review status.</p>}</section></div>
   </main>;
 }

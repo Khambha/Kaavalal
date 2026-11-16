@@ -160,7 +160,9 @@ def shelter_public(shelter, can_assign=None):
 def request_public(row, db):
     preferred = db.get(Shelter, row.preferred_shelter_id)
     assigned = db.get(Shelter, row.assigned_shelter_id) if row.assigned_shelter_id else None
-    return {"id": row.id, "citizen_id": row.citizen_id, "district": row.district, "lac": row.lac,
+    acceptance_id = f"KSL-{row.id:08d}" if assigned and row.status in {"Approved", "Assigned"} else None
+    result = {"id": row.id, "citizen_id": row.citizen_id, "district": row.district, "lac": row.lac,
+            "acceptance_id": acceptance_id,
             "household_name": row.household_name, "aadhaar_last4": row.aadhaar_last4,
             "phone": row.phone, "people_count": row.people_count, "special_needs": row.special_needs,
             "citizen_location": row.citizen_location, "latitude": row.latitude, "longitude": row.longitude,
@@ -169,6 +171,7 @@ def request_public(row, db):
             "assigned_shelter": shelter_public(assigned) if assigned else None,
             "created_at": row.created_at, "updated_at": row.updated_at,
             "eta_estimate_minutes": row.eta_estimate_minutes}
+    return result
 
 
 def require_responder(user):
