@@ -16,4 +16,5 @@ class ResourceTransaction(Base):
     unit = Column(String(40), nullable=False)
     quantity = Column(Integer, nullable=False)
     reason = Column(Text, nullable=False)
+    transaction_type = Column(String(20), nullable=False, default="Issued")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)

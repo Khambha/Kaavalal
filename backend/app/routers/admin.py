@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr, Field, model_validator
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,9 @@ from app.models.organization import Organization
 from app.models.user import User
 from app.models.responder_coverage import ResponderCoverage
 from app.models.resource_item import ResourceItem
+from app.models.resource_asset import ResourceAsset
+from app.models.resource_asset_assignment import ResourceAssetAssignment
+from app.models.resource_request import ResourceRequest
 from app.models.resource_transaction import ResourceTransaction
 from app.services.request_tracking import record_status
 from app.routers.admin_auth import get_current_admin, password_hash, admin_public
@@ -101,6 +104,8 @@ class ResourceCreate(BaseModel):
     unit: str = Field(min_length=1, max_length=40)
     quantity_available: int = Field(default=0, ge=0)
     low_stock_threshold: int = Field(default=0, ge=0)
+    is_returnable: bool = False
+    inventory_mode: str = Field(default="Bulk", pattern="^(Bulk|Tracked Asset)$")
 
     @model_validator(mode="after")
     def strip_text(self):
@@ -109,6 +114,8 @@ class ResourceCreate(BaseModel):
             if not value:
                 raise ValueError(f"{field.replace('_', ' ').title()} cannot be blank.")
             setattr(self, field, value)
+        if self.inventory_mode == "Tracked Asset" and not self.is_returnable:
+            raise ValueError("Tracked assets must be classified as reusable so they can be returned.")
         return self
 
 
@@ -118,8 +125,55 @@ class ResourceStockAdjustment(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class ResourceRequestDecision(BaseModel):
+    status: str = Field(pattern="^(Granted|Rejected)$")
+    quantity_granted: int | None = Field(default=None, ge=1, le=1000000)
+    asset_ids: list[int] = Field(default_factory=list, max_length=1000)
+    rejection_reason: str | None = Field(default=None, min_length=3, max_length=1000)
+
+
+class ResourceAssetsCreate(BaseModel):
+    identifiers: list[str] = Field(min_length=1, max_length=500)
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ResourceAssetRetirement(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ResourceMaintenanceUpdate(BaseModel):
+    action: str = Field(pattern="^(repair|retire)$")
+    quantity: int = Field(gt=0, le=1000000)
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class ResourceThresholdUpdate(BaseModel):
+    threshold: int = Field(ge=0, le=1000000)
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class ResourceDistrictUpdate(BaseModel):
     district: str = Field(min_length=2, max_length=100)
+
+
+STANDARD_DISTRICT_RESOURCE_CATALOG = (
+    ("Drinking water", "Water", "litres", False, "Bulk"),
+    ("Food packages", "Food", "packages", False, "Bulk"),
+    ("Medicine kiosks", "Medical", "kiosks", True, "Bulk"),
+    ("Ambulances", "Medical transport", "vehicles", True, "Tracked Asset"),
+    ("Rescue boats", "Water rescue", "boats", True, "Tracked Asset"),
+    ("Insect repellant kits", "Health", "kits", False, "Bulk"),
+    ("Personal first-aid kits", "Medical", "kits", False, "Bulk"),
+    ("Headlamps", "Equipment", "units", True, "Bulk"),
+    ("Earthmovers (JCBs)", "Heavy equipment", "vehicles", True, "Tracked Asset"),
+    ("Excavators", "Heavy equipment", "vehicles", True, "Tracked Asset"),
+    ("KSRTC buses", "Transport", "vehicles", True, "Tracked Asset"),
+    ("School buses", "Transport", "vehicles", True, "Tracked Asset"),
+    ("Power backup units", "Power", "units", True, "Bulk"),
+    ("Communication backup units", "Communications", "units", True, "Bulk"),
+    ("Sanitation supplies", "Sanitation", "kits", False, "Bulk"),
+    ("Camp supplies", "Camp", "kits", False, "Bulk"),
+)
 
 
 def resource_public(item: ResourceItem):
@@ -130,10 +184,43 @@ def resource_public(item: ResourceItem):
         "category": item.category,
         "unit": item.unit,
         "quantity_available": item.quantity_available,
+        "quantity_total": item.quantity_total,
+        "quantity_issued": max(0, item.quantity_total - item.quantity_available - item.quantity_quarantined),
+        "quantity_quarantined": item.quantity_quarantined,
+        "inventory_mode": item.inventory_mode,
         "low_stock_threshold": item.low_stock_threshold,
+        "is_returnable": item.is_returnable,
         "is_active": item.is_active,
         "created_at": item.created_at,
         "updated_at": item.updated_at,
+    }
+
+
+def resource_request_public(item: ResourceRequest, responder_name=None, responder_email=None):
+    granted = item.quantity_granted or 0
+    return {
+        "id": item.id,
+        "resource_id": item.resource_id,
+        "responder_id": item.responder_id,
+        "responder_name": responder_name,
+        "responder_email": responder_email,
+        "help_request_id": item.help_request_id,
+        "district": item.district,
+        "resource_name": item.resource_name,
+        "unit": item.unit,
+        "inventory_mode": item.inventory_mode,
+        "quantity_requested": item.quantity_requested,
+        "quantity_granted": granted,
+        "quantity_returned": item.quantity_returned,
+        "quantity_quarantined": item.quantity_quarantined,
+        "quantity_in_use": max(0, granted - item.quantity_returned) if item.is_returnable else 0,
+        "is_returnable": item.is_returnable,
+        "priority": item.priority,
+        "rejection_reason": item.rejection_reason,
+        "reason": item.reason,
+        "status": item.status,
+        "created_at": item.created_at,
+        "reviewed_at": item.reviewed_at,
     }
 
 
@@ -234,7 +321,12 @@ def dashboard(db: Session = Depends(get_db), admin: AdminUser = Depends(get_curr
             "active": db.query(func.count(ResourceItem.id)).filter(ResourceItem.is_active.is_(True)).scalar(),
             "low_stock": db.query(func.count(ResourceItem.id)).filter(
                 ResourceItem.is_active.is_(True),
+                ResourceItem.quantity_available > 0,
                 ResourceItem.quantity_available <= ResourceItem.low_stock_threshold,
+            ).scalar(),
+            "out_of_stock": db.query(func.count(ResourceItem.id)).filter(
+                ResourceItem.is_active.is_(True),
+                ResourceItem.quantity_available == 0,
             ).scalar(),
         },
         "recent_activity": [{
@@ -308,7 +400,165 @@ def list_resources(include_inactive: bool = False, db: Session = Depends(get_db)
     query = db.query(ResourceItem)
     if not include_inactive:
         query = query.filter(ResourceItem.is_active.is_(True))
-    return [resource_public(item) for item in query.order_by(ResourceItem.category, ResourceItem.name).all()]
+    items = query.order_by(ResourceItem.category, ResourceItem.name).all()
+    pending_counts = dict(db.query(ResourceRequest.resource_id, func.sum(ResourceRequest.quantity_requested))
+        .filter(ResourceRequest.status == "Pending").group_by(ResourceRequest.resource_id).all())
+    asset_counts = {(resource_id, status): count for resource_id, status, count in db.query(
+        ResourceAsset.resource_id, ResourceAsset.status, func.count(ResourceAsset.id)
+    ).group_by(ResourceAsset.resource_id, ResourceAsset.status).all()}
+    resources = []
+    for item in items:
+        resources.append({**resource_public(item), "quantity_requested_pending": int(pending_counts.get(item.id, 0) or 0),
+                          "assets_available": int(asset_counts.get((item.id, "Available"), 0)),
+                          "assets_assigned": int(asset_counts.get((item.id, "Assigned"), 0))})
+    return resources
+
+
+@router.get("/resource-requests")
+def list_resource_requests(status: str | None = Query(default=None, pattern="^(Pending|Granted|Partially Granted|Consumed|Rejected|Partially Returned|Returned)$"), limit: int = Query(default=100, ge=1, le=300), db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    query = db.query(ResourceRequest, User.full_name, User.email).join(User, ResourceRequest.responder_id == User.id)
+    if status:
+        query = query.filter(ResourceRequest.status == status)
+    priority_order = case((ResourceRequest.priority == "Critical", 0), (ResourceRequest.priority == "Urgent", 1), else_=2)
+    rows = query.order_by(case((ResourceRequest.status == "Pending", 0), else_=1),
+                          priority_order, ResourceRequest.created_at.desc(), ResourceRequest.id.desc()).limit(limit).all()
+    request_ids = [row.id for row, _, _ in rows]
+    asset_rows = (db.query(ResourceAssetAssignment, ResourceAsset)
+        .join(ResourceAsset, ResourceAsset.id == ResourceAssetAssignment.asset_id)
+        .filter(ResourceAssetAssignment.request_id.in_(request_ids)).all()) if request_ids else []
+    assets_by_request = {}
+    for assignment, asset in asset_rows:
+        assets_by_request.setdefault(assignment.request_id, []).append((assignment, asset))
+    results = []
+    for row, name, email in rows:
+        result = resource_request_public(row, name, email)
+        result["assets"] = [{"id": asset.id, "identifier": asset.asset_identifier, "status": asset.status,
+                             "return_condition": assignment.return_condition, "return_note": assignment.return_note}
+                            for assignment, asset in assets_by_request.get(row.id, [])]
+        results.append(result)
+    return results
+
+
+@router.get("/resource-assets")
+def list_resource_assets(district: str | None = Query(default=None, max_length=100), db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    query = db.query(ResourceAsset, ResourceItem).join(ResourceItem, ResourceItem.id == ResourceAsset.resource_id)
+    if district:
+        query = query.filter(func.lower(ResourceItem.district) == district.strip().lower())
+    rows = query.order_by(ResourceItem.name, ResourceAsset.asset_identifier).all()
+    result = []
+    for asset, item in rows:
+        request_row = db.get(ResourceRequest, asset.assigned_request_id) if asset.assigned_request_id else None
+        responder = db.get(User, request_row.responder_id) if request_row else None
+        result.append({"id": asset.id, "resource_id": item.id, "resource_name": item.name,
+            "identifier": asset.asset_identifier, "status": asset.status,
+            "assigned_request_id": asset.assigned_request_id,
+            "assigned_to": responder.full_name if responder else None,
+            "help_request_id": request_row.help_request_id if request_row else None,
+            "maintenance_note": asset.maintenance_note})
+    return result
+
+
+@router.patch("/resource-requests/{request_id}/decision")
+def decide_resource_request(request_id: int, data: ResourceRequestDecision, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    request_row = db.query(ResourceRequest).filter(ResourceRequest.id == request_id).with_for_update().first()
+    if request_row is None:
+        raise HTTPException(status_code=404, detail="Resource request not found.")
+    if request_row.status != "Pending":
+        raise HTTPException(status_code=409, detail="This resource request has already been reviewed.")
+    if data.status == "Granted":
+        item = db.query(ResourceItem).filter(ResourceItem.id == request_row.resource_id).with_for_update().first()
+        if item is None or not item.is_active:
+            raise HTTPException(status_code=409, detail="This inventory item is no longer active.")
+        grant_quantity = data.quantity_granted if data.quantity_granted is not None else request_row.quantity_requested
+        if grant_quantity > request_row.quantity_requested:
+            raise HTTPException(status_code=422, detail="Granted quantity cannot exceed the requested amount.")
+        if item.inventory_mode == "Tracked Asset":
+            if not data.asset_ids or len(data.asset_ids) != grant_quantity:
+                raise HTTPException(status_code=422, detail=f"Select exactly {grant_quantity} individually tracked assets.")
+            assets = db.query(ResourceAsset).filter(ResourceAsset.id.in_(data.asset_ids), ResourceAsset.resource_id == item.id, ResourceAsset.status == "Available").with_for_update().all()
+            if len(assets) != grant_quantity:
+                available = db.query(func.count(ResourceAsset.id)).filter(ResourceAsset.resource_id == item.id, ResourceAsset.status == "Available").scalar() or 0
+                raise HTTPException(status_code=409, detail=f"Only {available} tracked assets remain available. Refresh and adjust the approval.")
+            for asset in assets:
+                asset.status = "Assigned"
+                asset.assigned_request_id = request_row.id
+                db.add(ResourceAssetAssignment(request_id=request_row.id, asset_id=asset.id))
+            item.quantity_available -= grant_quantity
+        else:
+            if data.asset_ids:
+                raise HTTPException(status_code=422, detail="Asset IDs can only be assigned to tracked-asset requests.")
+            if grant_quantity > item.quantity_available:
+                raise HTTPException(status_code=409, detail=f"Only {item.quantity_available} {item.unit} remain in {item.district} stock. Adjust the grant quantity and try again.")
+            item.quantity_available -= grant_quantity
+        request_row.quantity_granted = grant_quantity
+        request_row.status = ("Partially Granted" if grant_quantity < request_row.quantity_requested
+                              else "Granted" if item.is_returnable else "Consumed")
+        db.add(ResourceTransaction(
+            resource_id=item.id,
+            responder_id=request_row.responder_id,
+            help_request_id=request_row.help_request_id,
+            resource_name=item.name,
+            district=item.district or request_row.district,
+            unit=item.unit,
+            quantity=grant_quantity,
+            transaction_type="Issued" if item.is_returnable else "Consumed",
+            reason=f"{request_row.status} resource request #{request_row.id}: {request_row.reason}",
+        ))
+    else:
+        if not data.rejection_reason or not data.rejection_reason.strip():
+            raise HTTPException(status_code=422, detail="A reason is required when rejecting a resource request.")
+        request_row.status = "Rejected"
+        request_row.rejection_reason = data.rejection_reason.strip()
+    request_row.reviewer_admin_id = admin.id
+    request_row.reviewed_at = datetime.now(timezone.utc)
+    log_action(db, admin, "resource_request_reviewed", "resource_request", request_row.id,
+               f"{request_row.status}: requested {request_row.quantity_requested}; granted {request_row.quantity_granted or 0} {request_row.unit} {request_row.resource_name} for {request_row.district}; {request_row.rejection_reason or ''}")
+    db.commit()
+    db.refresh(request_row)
+    return resource_request_public(request_row)
+
+
+@router.post("/resources/setup-standard-catalog")
+def setup_standard_resource_catalog(db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    """Create missing standard resource rows for every Kerala district, with unstocked balances."""
+    districts = list(get_lac_mapping())
+    existing_rows = db.query(ResourceItem).filter(ResourceItem.district.is_not(None)).all()
+    existing = {(item.name.strip().casefold(), item.district.strip().casefold()): item for item in existing_rows}
+    created = 0
+    for district in districts:
+        for name, category, unit, is_returnable, inventory_mode in STANDARD_DISTRICT_RESOURCE_CATALOG:
+            key = (name.casefold(), district.casefold())
+            if key in existing:
+                existing[key].is_returnable = is_returnable
+                if existing[key].quantity_total == 0 and existing[key].quantity_quarantined == 0:
+                    existing[key].inventory_mode = inventory_mode
+                continue
+            item = ResourceItem(
+                name=name,
+                district=district,
+                category=category,
+                unit=unit,
+                quantity_available=0,
+                quantity_total=0,
+                low_stock_threshold=0,
+                is_returnable=is_returnable,
+                inventory_mode=inventory_mode,
+                is_active=True,
+                created_by=admin.id,
+            )
+            db.add(item)
+            existing[key] = item
+            created += 1
+    if created:
+        log_action(db, admin, "resource_catalog_initialized", "resource_catalog", None,
+                   f"Created {created} unstocked entries across {len(districts)} districts.")
+    db.commit()
+    return {
+        "created": created,
+        "districts": len(districts),
+        "resources_per_district": len(STANDARD_DISTRICT_RESOURCE_CATALOG),
+        "message": "Standard district resource catalog is ready. New items start with zero stock; add only confirmed quantities.",
+    }
 
 
 @router.get("/resource-transactions")
@@ -323,6 +573,7 @@ def list_resource_transactions(limit: int = Query(default=50, ge=1, le=200), db:
         "district": transaction.district,
         "unit": transaction.unit,
         "quantity": transaction.quantity,
+        "transaction_type": transaction.transaction_type,
         "reason": transaction.reason,
         "help_request_id": transaction.help_request_id,
         "responder_name": responder_name,
@@ -333,6 +584,8 @@ def list_resource_transactions(limit: int = Query(default=50, ge=1, le=200), db:
 
 @router.post("/resources", status_code=201)
 def create_resource(data: ResourceCreate, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    if data.quantity_available != 0:
+        raise HTTPException(status_code=422, detail="New inventory items start at zero. Add stock afterward with a reason so the change is audited.")
     name = data.name.strip()
     districts = get_lac_mapping()
     actual_district = next((value for value in districts if value.casefold() == data.district.casefold()), None)
@@ -345,7 +598,9 @@ def create_resource(data: ResourceCreate, db: Session = Depends(get_db), admin: 
     if existing:
         raise HTTPException(status_code=409, detail="An item with that name already exists in this district. Adjust its stock instead.")
     item = ResourceItem(name=name, district=actual_district, category=data.category.strip(), unit=data.unit.strip(),
-        quantity_available=data.quantity_available, low_stock_threshold=data.low_stock_threshold,
+        quantity_available=data.quantity_available, quantity_total=data.quantity_available,
+        low_stock_threshold=data.low_stock_threshold, is_returnable=data.is_returnable,
+        inventory_mode=data.inventory_mode,
         created_by=admin.id)
     db.add(item)
     db.flush()
@@ -388,16 +643,127 @@ def adjust_resource_stock(resource_id: int, data: ResourceStockAdjustment, db: S
         raise HTTPException(status_code=404, detail="Inventory item not found.")
     if not item.is_active:
         raise HTTPException(status_code=409, detail="Reactivate this inventory item before changing its stock.")
+    if item.inventory_mode == "Tracked Asset":
+        raise HTTPException(status_code=409, detail="Add or retire tracked units by asset identifier instead of changing a bulk quantity.")
     delta = data.quantity if data.direction == "add" else -data.quantity
     updated_quantity = item.quantity_available + delta
     if updated_quantity < 0:
         raise HTTPException(status_code=409, detail=f"Only {item.quantity_available} {item.unit} are currently available.")
     item.quantity_available = updated_quantity
+    item.quantity_total += delta
     log_action(db, admin, "resource_stock_adjusted", "resource_item", item.id,
         f"{item.district or 'unassigned district'}: {data.direction.title()} {data.quantity} {item.unit}; {data.reason.strip()}; balance {updated_quantity}")
     db.commit()
     db.refresh(item)
     return resource_public(item)
+
+
+@router.patch("/resources/{resource_id}/maintenance")
+def update_bulk_resource_maintenance(resource_id: int, data: ResourceMaintenanceUpdate, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    item = db.query(ResourceItem).filter(ResourceItem.id == resource_id).with_for_update().first()
+    if item is None or item.inventory_mode != "Bulk" or not item.is_returnable:
+        raise HTTPException(status_code=404, detail="Reusable bulk inventory item not found.")
+    if data.quantity > item.quantity_quarantined:
+        raise HTTPException(status_code=409, detail=f"Only {item.quantity_quarantined} {item.unit} are currently in maintenance quarantine.")
+    item.quantity_quarantined -= data.quantity
+    if data.action == "repair":
+        item.quantity_available += data.quantity
+    else:
+        item.quantity_total -= data.quantity
+    log_action(db, admin, f"resource_bulk_{data.action}", "resource_item", item.id,
+        f"{item.district}: {data.action.title()} {data.quantity} quarantined {item.unit}; {data.reason.strip()}")
+    db.commit()
+    db.refresh(item)
+    return resource_public(item)
+
+
+@router.get("/resources/{resource_id}/assets")
+def list_resource_assets(resource_id: int, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    item = db.get(ResourceItem, resource_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Inventory item not found.")
+    result = []
+    for asset in db.query(ResourceAsset).filter(ResourceAsset.resource_id == item.id).order_by(ResourceAsset.asset_identifier).all():
+        request_row = db.get(ResourceRequest, asset.assigned_request_id) if asset.assigned_request_id else None
+        responder = db.get(User, request_row.responder_id) if request_row else None
+        result.append({"id": asset.id, "identifier": asset.asset_identifier, "status": asset.status,
+             "assigned_request_id": asset.assigned_request_id, "assigned_to": responder.full_name if responder else None,
+             "help_request_id": request_row.help_request_id if request_row else None, "maintenance_note": asset.maintenance_note})
+    return result
+
+
+@router.post("/resources/{resource_id}/assets", status_code=201)
+def add_resource_assets(resource_id: int, data: ResourceAssetsCreate, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    item = db.query(ResourceItem).filter(ResourceItem.id == resource_id).with_for_update().first()
+    if item is None or item.inventory_mode != "Tracked Asset":
+        raise HTTPException(status_code=404, detail="Tracked inventory item not found.")
+    if not item.is_active:
+        raise HTTPException(status_code=409, detail="Reactivate this item before adding assets.")
+    identifiers = [identifier.strip() for identifier in data.identifiers]
+    if any(not identifier for identifier in identifiers) or len({identifier.casefold() for identifier in identifiers}) != len(identifiers):
+        raise HTTPException(status_code=422, detail="Asset identifiers must be non-empty and unique in this submission.")
+    existing = {value.casefold() for (value,) in db.query(ResourceAsset.asset_identifier).all()}
+    if any(identifier.casefold() in existing for identifier in identifiers):
+        raise HTTPException(status_code=409, detail="An asset with one of those IDs already exists in the system.")
+    db.add_all(ResourceAsset(resource_id=item.id, asset_identifier=value) for value in identifiers)
+    item.quantity_available += len(identifiers)
+    item.quantity_total += len(identifiers)
+    log_action(db, admin, "resource_assets_added", "resource_item", item.id,
+               f"Added tracked assets {', '.join(identifiers)} to {item.district}; reason: {data.reason.strip()}")
+    db.commit()
+    return {"added": len(identifiers), "item": resource_public(item)}
+
+
+@router.patch("/resources/assets/{asset_id}/retire")
+def retire_resource_asset(asset_id: int, data: ResourceAssetRetirement, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    asset = db.query(ResourceAsset).filter(ResourceAsset.id == asset_id).with_for_update().first()
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Tracked asset not found.")
+    if asset.status == "Assigned":
+        raise HTTPException(status_code=409, detail="An assigned asset cannot be retired.")
+    if asset.status == "Retired":
+        raise HTTPException(status_code=409, detail="This asset is already retired.")
+    item = db.query(ResourceItem).filter(ResourceItem.id == asset.resource_id).with_for_update().first()
+    if asset.status == "Available":
+        item.quantity_available = max(0, item.quantity_available - 1)
+    elif asset.status == "Maintenance":
+        item.quantity_quarantined = max(0, item.quantity_quarantined - 1)
+    item.quantity_total = max(0, item.quantity_total - 1)
+    asset.status = "Retired"
+    asset.maintenance_note = data.reason.strip()
+    log_action(db, admin, "resource_asset_retired", "resource_asset", asset.id,
+               f"{asset.asset_identifier} from {item.district}; reason: {data.reason.strip()}")
+    db.commit()
+    return {"id": asset.id, "identifier": asset.asset_identifier, "status": asset.status}
+
+
+@router.patch("/resources/assets/{asset_id}/maintenance")
+def update_resource_asset_maintenance(asset_id: int, is_available: bool = Query(...), note: str = Query(default="", max_length=1000), db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    if not note.strip():
+        raise HTTPException(status_code=422, detail="Add a repair or maintenance note for the audit record.")
+    asset = db.query(ResourceAsset).filter(ResourceAsset.id == asset_id).with_for_update().first()
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Tracked asset not found.")
+    item = db.query(ResourceItem).filter(ResourceItem.id == asset.resource_id).with_for_update().first()
+    if asset.status == "Assigned":
+        raise HTTPException(status_code=409, detail="An assigned asset cannot be released from maintenance status.")
+    if is_available and asset.status == "Maintenance":
+        asset.status = "Available"
+        item.quantity_available += 1
+        item.quantity_quarantined = max(0, item.quantity_quarantined - 1)
+    elif not is_available and asset.status == "Available":
+        asset.status = "Maintenance"
+        asset.maintenance_note = note.strip()
+        item.quantity_available = max(0, item.quantity_available - 1)
+        item.quantity_quarantined += 1
+    elif (is_available and asset.status != "Maintenance") or (not is_available and asset.status != "Available"):
+        raise HTTPException(status_code=409, detail=f"The asset is already {asset.status.lower()}.")
+    if is_available:
+        asset.maintenance_note = None
+    log_action(db, admin, "resource_asset_maintenance_updated", "resource_asset", asset.id,
+               f"{asset.asset_identifier}: {'available' if is_available else 'maintenance'}; {note.strip()}")
+    db.commit()
+    return {"id": asset.id, "identifier": asset.asset_identifier, "status": asset.status}
 
 
 @router.patch("/resources/{resource_id}/active")
@@ -407,6 +773,20 @@ def set_resource_active(resource_id: int, is_active: bool, db: Session = Depends
         raise HTTPException(status_code=404, detail="Inventory item not found.")
     item.is_active = is_active
     log_action(db, admin, "resource_access_changed", "resource_item", item.id, f"is_active -> {is_active}")
+    db.commit()
+    db.refresh(item)
+    return resource_public(item)
+
+
+@router.patch("/resources/{resource_id}/threshold")
+def update_resource_threshold(resource_id: int, data: ResourceThresholdUpdate, db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    item = db.get(ResourceItem, resource_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Inventory item not found.")
+    previous = item.low_stock_threshold
+    item.low_stock_threshold = data.threshold
+    log_action(db, admin, "resource_low_stock_threshold_updated", "resource_item", item.id,
+               f"{item.district}: low-stock threshold {previous} -> {data.threshold} {item.unit}; {data.reason.strip()}")
     db.commit()
     db.refresh(item)
     return resource_public(item)

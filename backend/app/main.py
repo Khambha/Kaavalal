@@ -11,6 +11,9 @@ from app.models.responder_coverage import ResponderCoverage
 from app.models.password_reset_token import PasswordResetToken
 from app.models.alert import Alert
 from app.models.resource_item import ResourceItem
+from app.models.resource_request import ResourceRequest
+from app.models.resource_asset import ResourceAsset
+from app.models.resource_asset_assignment import ResourceAssetAssignment
 from app.models.resource_transaction import ResourceTransaction
 from app.models.shelter import Shelter, ShelterRequest, RequestStatusEvent
 from app.routers.help_requests import router as help_requests_router
@@ -100,6 +103,35 @@ resource_columns = {column["name"] for column in inspect(engine).get_columns("re
 if "district" not in resource_columns:
     with engine.begin() as connection:
         connection.execute(text("ALTER TABLE resource_items ADD COLUMN district VARCHAR(100) NULL"))
+resource_columns = {column["name"] for column in inspect(engine).get_columns("resource_items")}
+with engine.begin() as connection:
+    if "quantity_total" not in resource_columns:
+        connection.execute(text("ALTER TABLE resource_items ADD COLUMN quantity_total INTEGER NOT NULL DEFAULT 0"))
+        connection.execute(text("""UPDATE resource_items
+            SET quantity_total = quantity_available + COALESCE((
+                SELECT SUM(quantity) FROM resource_transactions
+                WHERE resource_transactions.resource_id = resource_items.id
+            ), 0)"""))
+    if "is_returnable" not in resource_columns:
+        connection.execute(text("ALTER TABLE resource_items ADD COLUMN is_returnable BOOLEAN NOT NULL DEFAULT FALSE"))
+    if "quantity_quarantined" not in resource_columns:
+        connection.execute(text("ALTER TABLE resource_items ADD COLUMN quantity_quarantined INTEGER NOT NULL DEFAULT 0"))
+    if "inventory_mode" not in resource_columns:
+        connection.execute(text("ALTER TABLE resource_items ADD COLUMN inventory_mode VARCHAR(20) NOT NULL DEFAULT 'Bulk'"))
+resource_request_columns = {column["name"] for column in inspect(engine).get_columns("resource_requests")}
+with engine.begin() as connection:
+    if "quantity_quarantined" not in resource_request_columns:
+        connection.execute(text("ALTER TABLE resource_requests ADD COLUMN quantity_quarantined INTEGER NOT NULL DEFAULT 0"))
+    if "priority" not in resource_request_columns:
+        connection.execute(text("ALTER TABLE resource_requests ADD COLUMN priority VARCHAR(20) NOT NULL DEFAULT 'Standard'"))
+    if "rejection_reason" not in resource_request_columns:
+        connection.execute(text("ALTER TABLE resource_requests ADD COLUMN rejection_reason TEXT NULL"))
+    if "inventory_mode" not in resource_request_columns:
+        connection.execute(text("ALTER TABLE resource_requests ADD COLUMN inventory_mode VARCHAR(20) NOT NULL DEFAULT 'Bulk'"))
+transaction_columns = {column["name"] for column in inspect(engine).get_columns("resource_transactions")}
+if "transaction_type" not in transaction_columns:
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE resource_transactions ADD COLUMN transaction_type VARCHAR(20) NOT NULL DEFAULT 'Issued'"))
 resource_indexes = {index["name"] for index in inspect(engine).get_indexes("resource_items")}
 if "ix_resource_items_district" not in resource_indexes:
     with engine.begin() as connection:

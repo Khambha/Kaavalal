@@ -49,6 +49,7 @@ export default function ResponderFeed() {
   const [coverage, setCoverage] = useState([]);
   const [items, setItems] = useState([]);
   const [resources, setResources] = useState([]);
+  const [resourceRequests, setResourceRequests] = useState([]);
   const [shelters, setShelters] = useState([]);
   const [otherShelterDistrict, setOtherShelterDistrict] = useState("");
   const [shelterRequests, setShelterRequests] = useState([]);
@@ -58,11 +59,14 @@ export default function ResponderFeed() {
   const [user, setUser] = useState(null);
   const [notes, setNotes] = useState({});
   const [resourceDrafts, setResourceDrafts] = useState({});
+  const [returnAmounts, setReturnAmounts] = useState({});
+  const [returnConditions, setReturnConditions] = useState({});
+  const [returnAssetSelections, setReturnAssetSelections] = useState({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
-  const [issuingId, setIssuingId] = useState(null);
+  const [resourceBusyId, setResourceBusyId] = useState(null);
   const [activeView, setActiveView] = useState("overview");
   const [mapLayer, setMapLayer] = useState("people");
   const [openConversationId, setOpenConversationId] = useState(null);
@@ -73,11 +77,12 @@ export default function ResponderFeed() {
   const load = useCallback(async () => {
     setError("");
     try {
-      const [profile, areas, feed, stock, shelterList, shelterQueue] = await Promise.all([
+      const [profile, areas, feed, stock, stockRequests, shelterList, shelterQueue] = await Promise.all([
         request("/api/auth/me"),
         request("/api/help-requests/responder/coverage"),
         request("/api/help-requests/responder/feed"),
         request("/api/responder/resources"),
+        request("/api/responder/resources/requests"),
         request("/api/shelters/responder/all"),
         request("/api/shelters/responder/requests"),
       ]);
@@ -85,6 +90,7 @@ export default function ResponderFeed() {
       setCoverage(areas);
       setItems(feed);
       setResources(stock);
+      setResourceRequests(stockRequests);
       setShelters(shelterList);
       setShelterRequests(shelterQueue);
     } catch (err) {
@@ -123,8 +129,8 @@ export default function ResponderFeed() {
     load();
     const interval = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
-      Promise.all([request("/api/help-requests/responder/feed"), request("/api/shelters/responder/all"), request("/api/shelters/responder/requests")])
-        .then(([feed, shelterList, shelterQueue]) => { setItems(feed); setShelters(shelterList); setShelterRequests(shelterQueue); })
+      Promise.all([request("/api/help-requests/responder/feed"), request("/api/responder/resources"), request("/api/responder/resources/requests"), request("/api/shelters/responder/all"), request("/api/shelters/responder/requests")])
+        .then(([feed, stock, stockRequests, shelterList, shelterQueue]) => { setItems(feed); setResources(stock); setResourceRequests(stockRequests); setShelters(shelterList); setShelterRequests(shelterQueue); })
         .catch(() => {});
     }, 15000);
     return () => window.clearInterval(interval);
@@ -148,35 +154,64 @@ export default function ResponderFeed() {
   function updateResourceDraft(resourceId, key, value) {
     setResourceDrafts(previous => ({
       ...previous,
-      [resourceId]: { quantity: "", reason: "", help_request_id: "", ...previous[resourceId], [key]: value },
+      [resourceId]: { quantity: "1", reason: "", help_request_id: "", priority: "Standard", ...previous[resourceId], [key]: value },
     }));
   }
 
-  async function issueResource(resource) {
+  async function requestResource(resource) {
     const draft = resourceDrafts[resource.id] || {};
     if (!draft.quantity || Number(draft.quantity) < 1 || !draft.reason?.trim()) {
-      setError("Enter a quantity and reason before changing stock.");
+      setError("Choose a quantity and enter why you need it.");
       return;
     }
     setError("");
     setNotice("");
-    setIssuingId(resource.id);
+    setResourceBusyId(resource.id);
     try {
-      const result = await request(`/api/responder/resources/${resource.id}/issue`, {
+      const result = await request(`/api/responder/resources/${resource.id}/requests`, {
         method: "POST",
         body: JSON.stringify({
           quantity: Number(draft.quantity),
           reason: draft.reason.trim(),
           help_request_id: draft.help_request_id ? Number(draft.help_request_id) : null,
+          priority: draft.priority || "Standard",
         }),
       });
-      setNotice(result.message);
-      setResourceDrafts(previous => ({ ...previous, [resource.id]: { quantity: "", reason: "", help_request_id: "" } }));
+      setNotice(`${result.message} Stock changes only after admin approval.`);
+      setResourceDrafts(previous => ({ ...previous, [resource.id]: { quantity: "1", reason: "", help_request_id: "", priority: "Standard" } }));
       await load();
     } catch (err) {
       setError(err.message);
     } finally {
-      setIssuingId(null);
+      setResourceBusyId(null);
+    }
+  }
+
+  async function returnResource(allocation) {
+    const condition = returnConditions[allocation.id] || "Good";
+    const assetIds = returnAssetSelections[allocation.id] || [];
+    const quantity = Number(returnAmounts[allocation.id] || 1);
+    if (allocation.inventory_mode === "Tracked Asset" ? assetIds.length < 1 : (!Number.isInteger(quantity) || quantity < 1 || quantity > allocation.quantity_in_use)) {
+      setError(allocation.inventory_mode === "Tracked Asset" ? "Select at least one assigned asset to return." : `Choose a return quantity from 1 to ${allocation.quantity_in_use}.`);
+      return;
+    }
+    if (condition === "Damaged" && !(returnAmounts[`note-${allocation.id}`] || "").trim()) { setError("Describe the damage or maintenance needed."); return; }
+    setResourceBusyId(`return-${allocation.id}`);
+    setError("");
+    setNotice("");
+    try {
+      const result = await request(`/api/responder/resources/requests/${allocation.id}/return`, {
+        method: "POST",
+        body: JSON.stringify({ quantity, asset_ids: assetIds, condition, note: returnAmounts[`note-${allocation.id}`] || "" }),
+      });
+      setNotice(result.message);
+      setReturnAmounts(previous => ({ ...previous, [allocation.id]: "1" }));
+      setReturnAssetSelections(previous => ({ ...previous, [allocation.id]: [] }));
+      await load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setResourceBusyId(null);
     }
   }
 
@@ -258,7 +293,7 @@ export default function ResponderFeed() {
   });
   const assignedActive = activeRequests.filter(item => item.assigned_responder_id === user?.id);
   const pendingShelters = shelterRequests.filter(item => item.status === "Pending").length;
-  const lowStockCount = resources.filter(item => Number(item.quantity_available) <= Number(item.low_stock_threshold || 0)).length;
+  const lowStockCount = resources.filter(item => Number(item.quantity_available) > 0 && Number(item.quantity_available) <= Number(item.low_stock_threshold || 0)).length;
 
   function renderIncidentCard(item) {
     const owned = item.assigned_responder_id === user?.id;
@@ -285,16 +320,18 @@ export default function ResponderFeed() {
   </>;
 
   const renderResources = <section className="responder-resources responder-resource-module">
-    <div className="responder-feed-heading"><div><h2>District relief resources</h2><p>Issue supplies for an operational need. Replenishment is managed by administrators.</p></div><button onClick={load}>Refresh</button></div>
-    {loading ? <p className="responder-empty">Loading district inventory…</p> : !resources.length ? <p className="responder-empty">No relief supplies are currently available in your covered districts.</p> : <div className="responder-resource-grid">{resources.map(resource=>{
-      const draft=resourceDrafts[resource.id]||{quantity:"",reason:"",help_request_id:""};
+    <div className="responder-feed-heading"><div><h2>District relief resources</h2><p>Request the available supplies or equipment your response needs. Priority requests are routed to your district admin.</p></div><button onClick={load}>Refresh</button></div>
+    {loading ? <p className="responder-empty">Loading district inventory…</p> : !resources.length ? <p className="responder-empty">No resources are listed in your covered districts.</p> : <div className="responder-resource-grid">{resources.map(resource=>{
+      const draft=resourceDrafts[resource.id]||{quantity:"1",reason:"",help_request_id:"",priority:"Standard"};
+      const available=resource.inventory_mode==="Tracked Asset"?(resource.available_assets||[]).length:Number(resource.quantity_available||0);
       const linkedRequests=items.filter(item=>item.assigned_responder_id===user?.id&&!['Resolved','Rejected'].includes(item.status)&&item.district?.toLowerCase()===resource.district?.toLowerCase());
       return <article className="responder-resource-card" key={resource.id}>
-        <div className="responder-card-top"><div><span className="responder-loc">{resource.district} · {resource.category}</span><h3>{resource.name}</h3></div><span className="responder-stock-count">{resource.quantity_available} {resource.unit}</span></div>
-        <p className="responder-stock-note">{Number(resource.quantity_available)<=Number(resource.low_stock_threshold||0)?"Low stock · Flag this item to an administrator.":"Available for response-team operations."}</p>
-        <div className="responder-resource-form"><label>Quantity to issue<input type="number" min="1" max={resource.quantity_available} value={draft.quantity} onChange={e=>updateResourceDraft(resource.id,"quantity",e.target.value)} placeholder="Enter a quantity"/></label><label>Reason<input value={draft.reason} onChange={e=>updateResourceDraft(resource.id,"reason",e.target.value)} placeholder="Describe the operational need"/></label>{linkedRequests.length>0&&<label>Link to assigned report (optional)<select value={draft.help_request_id} onChange={e=>updateResourceDraft(resource.id,"help_request_id",e.target.value)}><option value="">No linked report</option>{linkedRequests.map(item=><option key={item.id} value={item.id}>HELP-{item.id} · {item.emergency_type}</option>)}</select></label>}<div className="responder-resource-controls"><button className="resource-issue" disabled={issuingId===resource.id||resource.quantity_available<1} onClick={()=>issueResource(resource)}>{issuingId===resource.id?"Saving…":"Issue supplies"}</button></div></div>
+        <div className="responder-card-top"><div><span className="responder-loc">{resource.district} · {resource.category} · {resource.inventory_mode}</span><h3>{resource.name}</h3></div><span className="responder-stock-count">{available} available</span></div>
+        <p className="responder-stock-note">{resource.is_returnable?"Reusable equipment · return after use":"Single-use supplies · consumed when issued"}{available<=0?" · Currently unavailable":available<=Number(resource.low_stock_threshold||0)?" · Limited availability":""}</p>
+        <div className="responder-resource-form"><label>Quantity requested<div className="shelter-counter"><button type="button" disabled={Number(draft.quantity)<=1} onClick={()=>updateResourceDraft(resource.id,"quantity",String(Math.max(1,Number(draft.quantity||1)-1)))} aria-label={`Decrease ${resource.name} request`}>−</button><input type="number" min="1" max={available} value={draft.quantity} onChange={e=>updateResourceDraft(resource.id,"quantity",e.target.value)}/><button type="button" disabled={Number(draft.quantity)>=available} onClick={()=>updateResourceDraft(resource.id,"quantity",String(Number(draft.quantity||0)+1))} aria-label={`Increase ${resource.name} request`}>+</button></div></label><label>Priority<select value={draft.priority||"Standard"} onChange={e=>updateResourceDraft(resource.id,"priority",e.target.value)}><option>Standard</option><option>Urgent</option><option>Critical</option></select></label><label>Reason<input value={draft.reason} onChange={e=>updateResourceDraft(resource.id,"reason",e.target.value)} placeholder="Describe the operational need"/></label>{linkedRequests.length>0?<label>Required active incident<select required value={draft.help_request_id||""} onChange={e=>updateResourceDraft(resource.id,"help_request_id",e.target.value)}><option value="">Choose assigned incident</option>{linkedRequests.map(item=><option key={item.id} value={item.id}>HELP-{item.id} · {item.emergency_type}</option>)}</select></label>:<p className="responder-stock-note">An active incident assigned to you in this district is required to request resources.</p>}<div className="responder-resource-controls"><button className="resource-issue" disabled={resourceBusyId===resource.id||available<1||!resource.is_active||Number(draft.quantity)>available||!linkedRequests.length||!draft.help_request_id} onClick={()=>requestResource(resource)}>{resourceBusyId===resource.id?"Sending…":"Request from admin"}</button></div></div>
       </article>;
     })}</div>}
+    <section className="responder-resource-requests"><div className="responder-feed-heading"><div><h2>My resource requests</h2><p>Track approvals, asset assignments, and returns.</p></div></div>{!resourceRequests.length?<p className="responder-empty">You have not requested any resources yet.</p>:<div className="responder-cards">{resourceRequests.map(allocation=><article className="responder-card" key={`resource-request-${allocation.id}`}><div className="responder-card-top"><div><span className="responder-loc">{allocation.district} · {allocation.priority} priority</span><h3>{allocation.resource_name}</h3></div><span className="responder-status">{allocation.status}</span></div><p>{allocation.quantity_requested} {allocation.unit} requested{allocation.quantity_granted!=null?` · ${allocation.quantity_granted} granted`:""} · {allocation.reason}</p>{allocation.help_request_id&&<p>Linked incident: <b>HELP-{allocation.help_request_id}</b></p>}{allocation.status==="Pending"&&<p>Pending admin review. This amount is shown as requested but remains available until a decision.</p>}{allocation.status==="Rejected"&&<p>Rejected: {allocation.rejection_reason||"No reason supplied."}</p>}{["Granted","Partially Granted","Partially Returned","Consumed"].includes(allocation.status)?<><p>{allocation.is_returnable?`${allocation.quantity_in_use} ${allocation.unit} assigned · ${allocation.quantity_returned} returned · ${allocation.quantity_quarantined||0} quarantined`: `${allocation.quantity_granted} ${allocation.unit} consumed`}{allocation.quantity_granted<allocation.quantity_requested&&<span> · Unapproved remainder canceled</span>}</p>{allocation.assets?.length>0&&<p><b>Assigned assets:</b> {allocation.assets.filter(asset=>asset.status==="Assigned").map(asset=>asset.identifier).join(", ")||"None currently assigned"}</p>}{allocation.is_returnable&&allocation.quantity_in_use>0&&<div className="responder-resource-form"><label>Return condition<select value={returnConditions[allocation.id]||"Good"} onChange={e=>setReturnConditions(v=>({...v,[allocation.id]:e.target.value}))}><option value="Good">Good · return to available stock</option><option value="Damaged">Damaged · quarantine for maintenance</option></select></label>{allocation.inventory_mode==="Tracked Asset"?<div className="resource-return-assets"><b>Select assets to return</b>{allocation.assets?.filter(asset=>asset.status==="Assigned").map(asset=><label key={asset.id}><input type="checkbox" checked={(returnAssetSelections[allocation.id]||[]).includes(asset.id)} onChange={e=>setReturnAssetSelections(v=>{const selected=v[allocation.id]||[];return {...v,[allocation.id]:e.target.checked?[...selected,asset.id]:selected.filter(id=>id!==asset.id)};})}/>{asset.identifier}</label>)}</div>:<label>Quantity returned<input type="number" min="1" max={allocation.quantity_in_use} value={returnAmounts[allocation.id]??"1"} onChange={e=>setReturnAmounts(v=>({...v,[allocation.id]:e.target.value}))}/></label>}{(returnConditions[allocation.id]||"Good")==="Damaged"&&<label>Damage / maintenance note<input value={returnAmounts[`note-${allocation.id}`]||""} onChange={e=>setReturnAmounts(v=>({...v,[`note-${allocation.id}`]:e.target.value}))} placeholder="Describe the condition"/></label>}<button disabled={resourceBusyId===`return-${allocation.id}`} onClick={()=>returnResource(allocation)}>{resourceBusyId===`return-${allocation.id}`?"Recording return…":"Record return"}</button></div>}</>:null}{allocation.quantity_quarantined>0&&<p>{allocation.quantity_quarantined} {allocation.unit} quarantined for maintenance; unavailable to other teams.</p>}{allocation.status==="Returned"&&<p>All reusable items in this allocation have been returned or quarantined.</p>}</article>)}</div>}</section>
   </section>;
 
   const renderMap = <section className="responder-map-panel">
@@ -346,7 +383,7 @@ export default function ResponderFeed() {
           {loading&&!items.length?<p className="responder-empty">Loading reports…</p>:incidentRows.length?<div className="responder-cards">{incidentRows.map(renderIncidentCard)}</div>:<p className="responder-empty">No reports match these filters.</p>}
         </>}
         {activeView==="shelters"&&<><div className="responder-page-heading"><div><span className="responder-kicker">LOCAL ACCOMMODATION</span><h2>Shelter operations</h2><p>Review household requests and coordinate available capacity.</p></div><button className="responder-refresh" onClick={load}>Refresh shelters</button></div>{renderShelterOperations}</>}
-        {activeView==="resources"&&<><div className="responder-page-heading"><div><span className="responder-kicker">DISTRICT INVENTORY</span><h2>Relief resources</h2><p>Issue supplies with a recorded reason and optional report link.</p></div></div>{renderResources}</>}
+        {activeView==="resources"&&<><div className="responder-page-heading"><div><span className="responder-kicker">DISTRICT INVENTORY</span><h2>Relief resources</h2><p>Request equipment and supplies from your district administrator.</p></div></div>{renderResources}</>}
         {activeView==="map"&&<><div className="responder-page-heading"><div><span className="responder-kicker">GEOGRAPHIC OPERATIONS</span><h2>Response map</h2><p>Review requests, shelters, and constituency boundaries.</p></div></div>{renderMap}</>}
       </section>
       <footer className="responder-console-footer"><span>KAAVALAL FIELD OPERATIONS</span><span>Updates automatically while this console is open</span></footer>
