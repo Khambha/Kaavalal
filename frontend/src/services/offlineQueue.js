@@ -1,5 +1,6 @@
 const DB_NAME = "kaavalal-citizen-outbox";
 const STORE = "requests";
+import { getToken, getUserIdFromToken } from "./auth";
 
 function database() {
   return new Promise((resolve, reject) => {
@@ -27,13 +28,6 @@ function signal(detail = {}) {
   window.dispatchEvent(new CustomEvent("kaavalal-outbox-changed", { detail }));
 }
 
-function tokenSubject(token) {
-  try {
-    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    return String(JSON.parse(atob(payload)).sub || "");
-  } catch { return ""; }
-}
-
 export async function listOfflineRequests() {
   const db = await database();
   return new Promise((resolve, reject) => {
@@ -45,8 +39,8 @@ export async function listOfflineRequests() {
 }
 
 export async function queueOfflineRequest(entry) {
-  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
-  const owner_id = tokenSubject(token || "");
+  const token = getToken();
+  const owner_id = getUserIdFromToken(token);
   if (!owner_id) throw new Error("Sign in again before saving this request offline.");
   await withStore("readwrite", store => store.put({ ...entry, owner_id }));
   signal({ queued: true });
@@ -54,9 +48,9 @@ export async function queueOfflineRequest(entry) {
 
 export async function flushOfflineRequests() {
   if (!navigator.onLine) return { synced: 0 };
-  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  const token = getToken();
   if (!token) return { synced: 0 };
-  const owner = tokenSubject(token);
+  const owner = getUserIdFromToken(token);
   if (!owner) return { synced: 0 };
   const entries = (await listOfflineRequests()).filter(entry => entry.owner_id === owner);
   let synced = 0;

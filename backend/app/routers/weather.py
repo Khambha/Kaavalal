@@ -1,17 +1,10 @@
-import os
-from pathlib import Path
-
 import requests
-from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.location import Location
-
-load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
-
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
 router = APIRouter(
     prefix="/api/weather",
@@ -38,7 +31,7 @@ def get_weather(
         )
 
     # Check the API key.
-    if not OPENWEATHER_API_KEY:
+    if not settings.OPENWEATHER_API_KEY:
         raise HTTPException(
             status_code=500,
             detail="OpenWeather API key is not configured",
@@ -57,7 +50,7 @@ def get_weather(
     params = {
         "lat": location.latitude,
         "lon": location.longitude,
-        "appid": OPENWEATHER_API_KEY,
+        "appid": settings.OPENWEATHER_API_KEY,
         "units": "metric",
     }
 

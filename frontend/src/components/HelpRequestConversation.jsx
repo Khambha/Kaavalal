@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import "./help-request-conversation.css";
+import { getToken } from "../services/auth";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-
-function getToken() {
-  return localStorage.getItem("token") || sessionStorage.getItem("token") || localStorage.getItem("access_token") || "";
-}
 
 export default function HelpRequestConversation({ requestId, role, language = "en", closed = false }) {
   const [messages, setMessages] = useState([]);

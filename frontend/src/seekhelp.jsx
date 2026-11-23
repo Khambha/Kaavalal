@@ -3,6 +3,7 @@ import axios from "axios";
 import { CircleMarker, MapContainer, TileLayer, Tooltip, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import "./seekhelp.css";
+import { getToken as getAuthToken } from "./services/auth";
 import { t, localeName } from "./services/i18n";
 import { queueOfflineRequest } from "./services/offlineQueue";
 import HelpRequestConversation from "./components/HelpRequestConversation";
@@ -49,11 +50,7 @@ const INITIAL_FORM = {
 };
 
 function getToken() {
-  return (
-    localStorage.getItem("access_token") ||
-    localStorage.getItem("token") ||
-    ""
-  );
+  return getAuthToken();
 }
 
 function authConfig() {

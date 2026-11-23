@@ -1,4 +1,5 @@
 // Chat API client. Set VITE_API_URL (or REACT_APP_API_URL) to your FastAPI base, e.g. http://localhost:8000
+import { getToken } from "./auth";
 const BASE =
   (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL) ||
   (typeof process !== "undefined" && process.env && process.env.REACT_APP_API_URL) ||
@@ -8,8 +9,7 @@ const BASE =
 // Change the storage key to whatever your Login module uses.
 function authHeaders() {
   try {
-    const token = localStorage.getItem("token") || localStorage.getItem("access_token") ||
-      sessionStorage.getItem("token") || sessionStorage.getItem("access_token");
+    const token = getToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   } catch { return {}; }
 }

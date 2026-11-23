@@ -16,11 +16,10 @@ import Signup from "./pages/signup.jsx";
 import ResponderFeed from "./pages/ResponderFeed.jsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
+import { getRoleFromToken } from "./services/auth";
 
 function DashboardRoute() {
-  const role = sessionStorage.getItem("token")
-    ? sessionStorage.getItem("role")
-    : localStorage.getItem("role");
+  const role = getRoleFromToken();
   return ["rescuer", "responder"].includes(role)
     ? <Navigate to="/responder" replace />
     : <Dashboard />;

@@ -1,5 +1,3 @@
-import os
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
@@ -20,6 +18,7 @@ from app.models.shelter import Shelter, ShelterRequest, RequestStatusEvent
 from app.routers.help_requests import router as help_requests_router
 
 from app.core.database import Base, engine
+from app.core.config import settings
 
 from app.models import (
     Location,
@@ -57,7 +56,8 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 import app.chatbot.models  # noqa: F401
 import app.chatbot.ref_models  # noqa: F401
-from app.chatbot.router import router as chatbot_router, limiter as chatbot_limiter
+from app.chatbot.router import router as chatbot_router
+from app.core.rate_limit import limiter
 
 
 app = FastAPI(
@@ -66,24 +66,13 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.state.limiter = chatbot_limiter
+app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
-# Allow requests from the local React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(filter(None, [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:5175",
-        "http://127.0.0.1:5175",
-        "https://kaavalal.vercel.app",
-        os.getenv("ADMIN_APP_ORIGIN"),
-        *[origin.strip() for origin in os.getenv("FRONTEND_ORIGINS", "").split(",")],
-    ])),
+    allow_origins=settings.frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

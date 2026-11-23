@@ -1,13 +1,10 @@
 import hashlib
 import logging
-import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
-from pathlib import Path
-from dotenv import load_dotenv
 import jwt
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from sqlalchemy.orm import Session
@@ -17,6 +14,9 @@ from app.models.user import User
 from app.models.organization import Organization
 from app.models.password_reset_token import PasswordResetToken
 from app.services.password_reset_email import password_reset_email_configured, send_password_reset_email
+from app.core.rate_limit import get_login_email_key, limiter
+from app.core.config import settings
+from app.services.login_protection import clear_failed_logins, email_digest, is_locked, record_failed_login
 from app.schemas.auth import (
     ForgotPasswordRequest,
     SignupRequest,
@@ -35,19 +35,9 @@ class AvailabilityUpdate(BaseModel):
 
 password_hash = PasswordHash.recommended()
 bearer_scheme = HTTPBearer()
+DUMMY_PASSWORD_HASH = password_hash.hash(secrets.token_urlsafe(32))
 
-BACKEND_DIR = Path(__file__).resolve().parents[2]
-
-# Load environment variables from backend/.env
-ENV_FILE = BACKEND_DIR / ".env"
-load_dotenv(ENV_FILE)
-
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-
-if not SECRET_KEY:
-    raise RuntimeError(
-        f"JWT_SECRET_KEY is missing. Please check: {ENV_FILE}"
-    )
+SECRET_KEY = settings.JWT_SECRET_KEY
 
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_MINUTES = 30
@@ -109,7 +99,8 @@ def get_current_user(
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def signup(data: SignupRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/hour")
+def signup(request: Request, data: SignupRequest, db: Session = Depends(get_db)):
     email = str(data.email).lower()
 
     existing_user = db.query(User).filter(User.email == email).first()
@@ -182,20 +173,26 @@ def signup(data: SignupRequest, db: Session = Depends(get_db)):
 # -------------------- LOGIN --------------------
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: LoginRequest, db: Session = Depends(get_db)):
-    email = str(data.email).lower()
+@limiter.limit("30/minute")
+@limiter.limit("10/minute", key_func=get_login_email_key)
+def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
+    email = str(data.email).strip().lower()
+    digest = email_digest(email, SECRET_KEY)
+
+    if is_locked(db, "citizen", digest):
+        password_hash.verify(data.password, DUMMY_PASSWORD_HASH)
+        raise HTTPException(status_code=401, detail="Incorrect email or password.")
 
     user = db.query(User).filter(User.email == email).first()
-
-    if not user or not password_hash.verify(
-        data.password,
-        user.hashed_password,
-    ):
+    password_valid = password_hash.verify(data.password, user.hashed_password if user else DUMMY_PASSWORD_HASH)
+    if not user or not password_valid:
+        record_failed_login(db, "citizen", digest)
         raise HTTPException(
             status_code=401,
             detail="Incorrect email or password.",
         )
 
+    clear_failed_logins(db, "citizen", digest)
     if user.status != "active":
         raise HTTPException(
             status_code=403,
@@ -208,7 +205,9 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/forgot-password")
+@limiter.limit("5/hour")
 def forgot_password(
+    request: Request,
     data: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -248,7 +247,7 @@ def forgot_password(
     db.add(token_record)
     db.commit()
 
-    base_url = os.getenv("FRONTEND_BASE_URL", "http://127.0.0.1:5173").rstrip("/")
+    base_url = settings.FRONTEND_BASE_URL.rstrip("/")
     reset_url = f"{base_url}/reset-password#{urlencode({'token': raw_token})}"
     background_tasks.add_task(send_password_reset_email_safely, email, reset_url, token_record.id)
     return {"message": generic_message}
@@ -270,7 +269,8 @@ def send_password_reset_email_safely(recipient: str, reset_url: str, token_recor
 
 
 @router.post("/reset-password")
-def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/hour")
+def reset_password(request: Request, data: ResetPasswordRequest, db: Session = Depends(get_db)):
     token_hash = hashlib.sha256(data.token.encode("utf-8")).hexdigest()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     token_record = db.query(PasswordResetToken).filter(

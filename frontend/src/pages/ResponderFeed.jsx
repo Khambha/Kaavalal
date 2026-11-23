@@ -4,16 +4,13 @@ import "./responder.css";
 import "./responder-shelters.css";
 import "./responder-map.css";
 import ChatWidget from "../components/chatbot/ChatWidget";
+import { clearToken, getToken } from "../services/auth";
 import HelpRequestConversation from "../components/HelpRequestConversation";
 import KeralaMap from "../dashboard-ui/KeralaMap";
 import "../dashboard-ui/dashboard.css";
 import "./responder-console.css";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-
-function getToken() {
-  return localStorage.getItem("token") || sessionStorage.getItem("token");
-}
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_URL}${path}`, {
@@ -95,8 +92,7 @@ export default function ResponderFeed() {
       setShelterRequests(shelterQueue);
     } catch (err) {
       if (/token|credentials|authorized/i.test(err.message)) {
-        localStorage.removeItem("token");
-        sessionStorage.removeItem("token");
+        clearToken();
         navigate("/login", { replace: true });
         return;
       }
@@ -271,10 +267,7 @@ export default function ResponderFeed() {
   }
 
   function signOut() {
-    localStorage.removeItem("token");
-    localStorage.removeItem("access_token");
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("access_token");
+    clearToken();
     localStorage.removeItem("role");
     sessionStorage.removeItem("role");
     navigate("/login", { replace: true });

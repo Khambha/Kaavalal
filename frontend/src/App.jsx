@@ -8,8 +8,9 @@ import KeralaMap from "./dashboard-ui/KeralaMap";
 import Icon from "./dashboard-ui/Icons";
 import RiskMeter from "./dashboard-ui/RiskMeter";
 import { normalizeDistrictName, getDistrictLayerScore, getRiskBand } from "./dashboard-ui/riskScale";
-import lacData from "./lac_locations.json";
-import SeekHelp from "./seekheelp";
+import { clearToken, getToken } from "./services/auth";
+import lacData from "./dashboard-ui/lac_locations.json";
+import SeekHelp from "./seekhelp";
 import ShelterRequests from "./pages/ShelterRequests";
 import CitizenPortal, { CitizenAlerts, CitizenInformation } from "./pages/CitizenPortal";
 import ChatWidget from "./components/chatbot/ChatWidget";
@@ -338,9 +339,7 @@ function App() {
   const [shelters, setShelters] = useState([]);
   const [activeView, setActiveView] = useState("citizen");
   const [language, setLanguage] = useState(localStorage.getItem("kaavalal_language") === "ml" ? "ml" : "en");
-  const [isSignedIn, setIsSignedIn] = useState(() => Boolean(
-    localStorage.getItem("token") || sessionStorage.getItem("token") || localStorage.getItem("access_token") || sessionStorage.getItem("access_token")
-  ));
+  const [isSignedIn, setIsSignedIn] = useState(() => Boolean(getToken()));
 
   useEffect(() => {
     const nextView = routeLocation.state?.citizenView;
@@ -357,11 +356,9 @@ function App() {
   }
 
   function signOut() {
-    for (const storage of [localStorage, sessionStorage]) {
-      storage.removeItem("token");
-      storage.removeItem("access_token");
-      storage.removeItem("role");
-    }
+    clearToken();
+    localStorage.removeItem("role");
+    sessionStorage.removeItem("role");
     setIsSignedIn(false);
     navigate("/login", { replace: true });
   }
@@ -404,7 +401,7 @@ function App() {
       }, null)?.lac;
     }
     async function savedArea() {
-      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      const token = getToken();
       if (!token) return false;
       try {
         const response = await fetch(`${API_URL}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } });

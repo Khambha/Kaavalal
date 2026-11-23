@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AuthLayout, { Icon, RoleToggle } from "./AuthLayout";
+import { clearToken, setToken } from "../services/auth";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
@@ -33,13 +34,12 @@ export default function Signin() {
       // Keep only the newly authenticated account. A previous token in the
       // other storage area (or the legacy key) could otherwise be reused by
       // shelter requests and submit under the wrong role.
+      clearToken();
       for (const storage of [localStorage, sessionStorage]) {
-        storage.removeItem("token");
-        storage.removeItem("access_token");
         storage.removeItem("role");
       }
       const store = remember ? localStorage : sessionStorage;
-      store.setItem("token", data.access_token);
+      setToken(data.access_token, { persist: remember });
       const profileResponse = await fetch(`${API_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${data.access_token}` },
       });

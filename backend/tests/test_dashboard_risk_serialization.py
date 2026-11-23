@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from app.routers.dashboard import serialize_risk
 
 
-def test_dashboard_calculates_baseline_from_complete_hazard_labels():
+def test_dashboard_does_not_infer_numeric_scores_from_hazard_labels():
     hazards = SimpleNamespace(
         flood_level="HIGH",
         landslide_level="LOW",
@@ -13,11 +13,8 @@ def test_dashboard_calculates_baseline_from_complete_hazard_labels():
 
     result = serialize_risk(None, hazards)
 
-    assert result["flood_risk"] == 75
-    assert result["landslide_risk"] == 25
-    assert result["drought_risk"] == 50
-    assert result["overall_risk"] == 50
-    assert result["score_type"] == "illustrative_baseline"
+    # Hazard labels describe categories; they are not calibrated numeric risks.
+    assert result is None
 
 
 def test_dashboard_does_not_calculate_when_a_required_hazard_is_missing():

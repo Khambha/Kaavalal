@@ -2,7 +2,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -12,8 +12,8 @@ from app.models.weather import WeatherData
 from app.models.rainfall import RainfallData
 from app.models.hazard import HazardData
 from app.models.risk import RiskData
-from app.services.imd_mock_importer import import_imd_mock_data
 from app.services.risk_engine import assess_location
+from app.core.rate_limit import limiter
 
 
 router = APIRouter(
@@ -226,7 +226,9 @@ def get_dashboard(
 
 
 @router.post("/{location_id}/calculate-risk")
+@limiter.limit("10/minute")
 async def calculate_location_risk(
+    request: Request,
     location_id: int,
     db: Session = Depends(get_db),
 ):
@@ -252,45 +254,4 @@ async def calculate_location_risk(
         raise HTTPException(
             status_code=500,
             detail="Unable to calculate risk because of a database error.",
-        )
-
-
-@router.post("/mock-weather/import")
-def import_mock_weather(
-    db: Session = Depends(get_db),
-):
-    """
-    Development-only endpoint for importing mock weather data.
-    Do not expose this endpoint in production.
-    """
-
-    try:
-        result = import_imd_mock_data(db)
-
-        return {
-            "message": "Mock weather import completed",
-            **result,
-        }
-
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=500,
-            detail="Mock weather data file was not found.",
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=str(exc),
-        )
-    except SQLAlchemyError:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Mock import failed because of a database error.",
-        )
-    except Exception:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Mock import failed. Check the backend terminal logs.",
         )

@@ -1,20 +1,16 @@
 """Central settings for the chatbot. Reads from backend/.env."""
-import os
 from pathlib import Path
-from dotenv import load_dotenv
-
-BASE_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(BASE_DIR / ".env")
+from app.core.config import BASE_DIR, settings as app_settings
 
 
-def _backend_path(env_name: str, default: str) -> str:
+def _backend_path(configured_value: str) -> str:
     """Resolve chatbot paths from the backend directory, independent of process cwd."""
-    configured = Path(os.getenv(env_name, default)).expanduser()
+    configured = Path(configured_value).expanduser()
     return str(configured if configured.is_absolute() else (BASE_DIR / configured).resolve())
 
 # Which AI model runs the chatbot: gemini | groq | openrouter | ollama | anthropic
-PROVIDER = os.getenv("CHATBOT_PROVIDER", "gemini").strip().lower()
-CHATBOT_MODEL = os.getenv("CHATBOT_MODEL", "").strip()   # empty = the provider's default below
+PROVIDER = app_settings.CHATBOT_PROVIDER.strip().lower()
+CHATBOT_MODEL = app_settings.CHATBOT_MODEL.strip()   # empty = the provider's default below
 
 # Defaults only. Free-tier model names change over time: check the provider's current model list if a name is rejected.
 DEFAULT_MODELS = {
@@ -25,19 +21,16 @@ DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5-5",
 }
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-EMBEDDING_MODEL = os.getenv(
-    "CHATBOT_EMBEDDING_MODEL",
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-)
-VECTOR_DIR = _backend_path("CHATBOT_VECTOR_DIR", "chatbot_vectorstore")
-KB_DIR = _backend_path("CHATBOT_KB_DIR", "app/chatbot/knowledge")
-RATE_LIMIT = os.getenv("CHATBOT_RATE_LIMIT", "20/minute")
-KSDMA_DATA_READY = os.getenv("CHATBOT_KSDMA_DATA_READY", "false").strip().lower() == "true"
+ANTHROPIC_API_KEY = app_settings.ANTHROPIC_API_KEY or ""
+GOOGLE_API_KEY = app_settings.GOOGLE_API_KEY or ""
+GROQ_API_KEY = app_settings.GROQ_API_KEY or ""
+OPENROUTER_API_KEY = app_settings.OPENROUTER_API_KEY or ""
+OLLAMA_BASE_URL = app_settings.OLLAMA_BASE_URL
+EMBEDDING_MODEL = app_settings.CHATBOT_EMBEDDING_MODEL
+VECTOR_DIR = _backend_path(app_settings.CHATBOT_VECTOR_DIR)
+KB_DIR = _backend_path(app_settings.CHATBOT_KB_DIR)
+RATE_LIMIT = app_settings.CHATBOT_RATE_LIMIT
+KSDMA_DATA_READY = app_settings.CHATBOT_KSDMA_DATA_READY
 
 # Chatbot identity (change here to rename it everywhere in the backend)
 BOT_NAME = "Thunai"

@@ -1,9 +1,7 @@
-import os
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from pydantic import BaseModel, EmailStr, Field
@@ -11,14 +9,15 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.admin_user import AdminUser
+from app.core.config import settings
+from app.core.rate_limit import get_login_email_key, limiter
+from app.services.login_protection import clear_failed_logins, email_digest, is_locked, record_failed_login
 
-load_dotenv()
 router = APIRouter(prefix="/api/admin-auth", tags=["Admin Authentication"])
 bearer_scheme = HTTPBearer()
 password_hash = PasswordHash.recommended()
-SECRET_KEY = os.getenv("ADMIN_JWT_SECRET_KEY")
-if not SECRET_KEY:
-    raise RuntimeError("ADMIN_JWT_SECRET_KEY is missing. Configure it in backend/.env.")
+DUMMY_PASSWORD_HASH = password_hash.hash(os.urandom(32).hex())
+SECRET_KEY = settings.ADMIN_JWT_SECRET_KEY
 
 
 class AdminLoginRequest(BaseModel):
@@ -69,11 +68,21 @@ def get_current_admin(
 
 
 @router.post("/login")
-def login(data: AdminLoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("30/minute")
+@limiter.limit("10/minute", key_func=get_login_email_key)
+def login(request: Request, data: AdminLoginRequest, db: Session = Depends(get_db)):
     email = str(data.email).strip().lower()
-    admin = db.query(AdminUser).filter(AdminUser.email == email).first()
-    if not admin or not password_hash.verify(data.password, admin.hashed_password):
+    digest = email_digest(email, SECRET_KEY)
+    if is_locked(db, "admin", digest):
+        password_hash.verify(data.password, DUMMY_PASSWORD_HASH)
         raise HTTPException(status_code=401, detail="Incorrect email or password.")
+
+    admin = db.query(AdminUser).filter(AdminUser.email == email).first()
+    password_valid = password_hash.verify(data.password, admin.hashed_password if admin else DUMMY_PASSWORD_HASH)
+    if not admin or not password_valid:
+        record_failed_login(db, "admin", digest)
+        raise HTTPException(status_code=401, detail="Incorrect email or password.")
+    clear_failed_logins(db, "admin", digest)
     if not admin.is_active:
         raise HTTPException(status_code=403, detail="This admin account is inactive.")
     return {"access_token": create_admin_token(admin), "token_type": "bearer", "admin": admin_public(admin)}
