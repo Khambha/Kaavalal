@@ -63,6 +63,13 @@ class HelpRequest(Base):
 
     responder_notes = Column(Text, nullable=True)
 
+    # Administrator verification is separate from the responder dispatch status.
+    review_status = Column(String(20), nullable=False, default="Pending", index=True)
+    review_message = Column(Text, nullable=True)
+    reviewed_by_admin_id = Column(Integer, ForeignKey("admin_users.id"), nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    triage_note = Column(Text, nullable=True)
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

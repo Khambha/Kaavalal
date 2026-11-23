@@ -1,6 +1,6 @@
 import { BAND_THRESHOLDS, getRiskBand } from "./riskScale";
 
-export default function RiskMeter({ label, value, featured = false }) {
+export default function RiskMeter({ label, value, featured = false, suffix = "%" }) {
   const available = value !== null && value !== undefined;
   const band = available ? getRiskBand(value) : null;
   const pct = available ? Math.min(Math.max(Number(value), 0), 100) : 0;
@@ -17,7 +17,7 @@ export default function RiskMeter({ label, value, featured = false }) {
           ) : (
             <span className="band-chip is-none">Unavailable</span>
           )}
-          <strong className="meter-num">{available ? `${pct}%` : "—"}</strong>
+          <strong className="meter-num">{available ? `${pct}${suffix}` : "—"}</strong>
         </span>
       </div>
       <div
@@ -27,7 +27,7 @@ export default function RiskMeter({ label, value, featured = false }) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={available ? pct : undefined}
-        aria-valuetext={available ? `${pct}%, ${band.label}` : "Unavailable"}
+        aria-valuetext={available ? `${pct}${suffix}, ${band.label}` : "Unavailable"}
       >
         <span className="meter-fill" style={{ width: `${pct}%`, background: band?.color }} />
         {BAND_THRESHOLDS.map((t) => (

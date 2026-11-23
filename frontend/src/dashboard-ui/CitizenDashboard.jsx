@@ -509,10 +509,10 @@ function App() {
                   type="button"
                   aria-current={isSelected ? "true" : undefined}
                 >
-                  <span className="risk-dot" style={{ background: band.color }} aria-hidden="true" />
+                  <span className="risk-dot" style={{ background: band?.color || "#aebbb8" }} aria-hidden="true" />
                   <span className="district-name">{district.name}</span>
-                  <span className="district-score" title={`${selectedLayer}: ${band.label}`}>
-                    {score}
+                  <span className="district-score" title={`${selectedLayer}: ${band?.label || "Unavailable"}`}>
+                    {score == null ? "—" : score}
                   </span>
                 </button>
               );

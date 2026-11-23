@@ -59,6 +59,10 @@ class HelpRequestResponse(BaseModel):
     shelter_id: Optional[int] = None
     eta_estimate_minutes: Optional[int] = None
     responder_notes: Optional[str] = None
+    review_status: str = "Pending"
+    review_message: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    triage_note: Optional[str] = None
 
     created_at: datetime
     updated_at: datetime

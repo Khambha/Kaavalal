@@ -1,13 +1,14 @@
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.location import Location
-from app.models.risk import RiskData
-from app.services.risk_calculator import calculate_baseline_risk
 from app.schemas.flood import FloodDemoPredictionRequest
 from app.services.flood_demo_model import predict_flood_demo
+from app.services.risk_engine import assess_location
 
 
 router = APIRouter(
@@ -53,32 +54,16 @@ def get_risk(
             detail="Location not found",
         )
 
-    # Retrieve the latest risk record for this location
-    risk = (
-        db.query(RiskData)
-        .filter(RiskData.location_id == location_id)
-        .order_by(RiskData.recorded_at.desc())
-        .first()
-    )
-
-    if risk is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Risk data not found for this location",
-        )
-
     return {
         "location_id": location.id,
         "location_name": location.name,
-        "flood_risk": risk.flood_risk,
-        "landslide_risk": risk.landslide_risk,
-        "drought_risk": risk.drought_risk,
-        "overall_risk": risk.overall_risk,
-        "recorded_at": risk.recorded_at,
+        "status": "INSUFFICIENT_DATA",
+        "score": None,
+        "reason": "Legacy scores are not exposed as validated risk. Use /api/dashboard/risk/{district_id} for live weather features.",
     }
 
 @router.post("/{location_id}/calculate")
-def calculate_risk(
+async def calculate_risk(
     location_id: int,
     db: Session = Depends(get_db),
 ):
@@ -95,22 +80,8 @@ def calculate_risk(
             detail="Location not found",
         )
 
-    try:
-        risk = calculate_baseline_risk(db, location_id)
-
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=str(exc),
-        ) from exc
-
-    return {
-        "message": "Risk assessment calculated successfully",
-        "location_id": location.id,
-        "location_name": location.name,
-        "flood_risk": risk.flood_risk,
-        "landslide_risk": risk.landslide_risk,
-        "drought_risk": risk.drought_risk,
-        "overall_risk": risk.overall_risk,
-        "recorded_at": risk.recorded_at,
-    }
+    if location.latitude is None or location.longitude is None:
+        raise HTTPException(status_code=422, detail="Location coordinates are required")
+    return await asyncio.to_thread(
+        assess_location, location.id, location.name, location.latitude, location.longitude
+    )

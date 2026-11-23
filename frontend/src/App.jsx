@@ -21,11 +21,10 @@ import "./pages/request-tracking.css";
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const hazardLayers = [
-  { name: "Overall Risk", description: "Combined overview of available district risk indicators." },
-  { name: "Flood", description: "Flood-related indicators and susceptibility information." },
-  { name: "Landslide", description: "Rainfall, terrain, and landslide-susceptibility indicators." },
-  { name: "Drought", description: "Rainfall deficit and drought-related indicators." },
-  { name: "Rainfall", description: "Available rainfall measurements and summaries." },
+  { name: "Overall Risk", description: "Highest available experimental preparedness index; not a disaster probability." },
+  { name: "Flood", description: "Forecast rainfall scenario index blended with recent weather context." },
+  { name: "Landslide", description: "Rainfall scenario index; official terrain susceptibility data is not yet integrated." },
+  { name: "Drought", description: "Seasonal rainfall and evapotranspiration scenario index blended with recent weather." },
 ];
 
 const initialDistricts = [
@@ -326,6 +325,7 @@ function App() {
 
   const [dashboard, setDashboard] = useState(null);
   const [riskByDistrict, setRiskByDistrict] = useState({});
+  const [riskMapLoading, setRiskMapLoading] = useState(true);
   const [liveWeather, setLiveWeather] = useState(null);
   const [lacWeatherLoading, setLacWeatherLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -452,18 +452,20 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
+    setRiskMapLoading(true);
     axios.get(`${API_URL}/api/dashboard/risk-map`)
       .then((response) => {
         if (!cancelled && Array.isArray(response.data)) {
           const next = {};
           response.data.forEach((entry) => {
-            if (!entry?.district || !entry?.risk) return;
-            next[normalizeDistrictName(entry.district)] = { ...entry.risk, source: entry.source };
+            if (!entry?.district || !entry?.risk || !["OK", "EXPERIMENTAL_INDEX"].includes(entry.status)) return;
+            next[normalizeDistrictName(entry.district)] = { ...entry.risk, source: entry.source, metadata: entry.metadata, status: entry.status };
           });
           setRiskByDistrict(next);
         }
       })
-      .catch(() => { /* Use labelled demo values if no calculated data is available. */ });
+      .catch(() => { if (!cancelled) setRiskByDistrict({}); })
+      .finally(() => { if (!cancelled) setRiskMapLoading(false); });
     return () => { cancelled = true; };
   }, [refreshKey]);
 
@@ -661,15 +663,12 @@ function App() {
   const rainfall = liveWeather ? { rainfall_24h: liveWeather.rainfall } : dashboard?.rainfall;
   const districtName = selectedDistrict?.name || location?.name || "Palakkad";
   const selectedDistrictRisk = riskByDistrict[districtKey] || null;
-  const demoRisk = {
-    flood_risk: getDistrictLayerScore(districtName, "Flood"),
-    landslide_risk: getDistrictLayerScore(districtName, "Landslide"),
-    drought_risk: getDistrictLayerScore(districtName, "Drought"),
-    overall_risk: getDistrictLayerScore(districtName, "Overall Risk"),
-    score_type: "sample_demo",
-  };
-  const risk = selectedDistrictRisk || dashboard?.risk || demoRisk;
-  const isDemoRisk = risk?.score_type === "sample_demo" || risk?.source === "sample_demo";
+  const hasValidatedModelRisk = selectedDistrictRisk?.status === "OK" &&
+    ["VERIFIED_HISTORICAL", "PROXY_CALIBRATED"].includes(selectedDistrictRisk?.model_provenance);
+  const hasExperimentalRisk = selectedDistrictRisk?.status === "EXPERIMENTAL_INDEX";
+  const risk = hasValidatedModelRisk || hasExperimentalRisk ? selectedDistrictRisk : null;
+  const isExperimentalRisk = hasExperimentalRisk;
+  const riskSuffix = hasValidatedModelRisk ? "%" : "/100";
 
   const isStateView = selectedDistrict === "ALL";
   const panelLabel = selectedLac
@@ -755,7 +754,7 @@ function App() {
             />
           </label>
 
-          <p className="sidebar-caption">Dot and score show {selectedLayer.toLowerCase()}{Object.keys(riskByDistrict).length ? " · calculated where source hazard levels exist" : " · sample demo values"}.</p>
+          <p className="sidebar-caption" role={riskMapLoading ? "status" : undefined}>{riskMapLoading ? "Loading live weather scenarios…" : "Combines current forecasts with historical weather anchors. Experimental index out of 100; not a disaster chance or official warning."}</p>
 
           <div className="district-list">
             {filteredDistricts.map((district) => {
@@ -766,7 +765,7 @@ function App() {
                   normalizeDistrictName(selectedDistrict.name) ===
                     normalizeDistrictName(district.name));
               const score = getDistrictLayerScore(district.name, selectedLayer, riskByDistrict);
-              const band = getRiskBand(score);
+              const band = getRiskBand(score, selectedLayer);
 
               return (
                 <button
@@ -779,10 +778,10 @@ function App() {
                   type="button"
                   aria-current={isSelected ? "true" : undefined}
                 >
-                  <span className="risk-dot" style={{ background: band.color }} aria-hidden="true" />
+                  <span className="risk-dot" style={{ background: band?.color || "#aebbb8" }} aria-hidden="true" />
                   <span className="district-name">{district.name}</span>
-                  <span className="district-score" title={`${selectedLayer}: ${band.label}`}>
-                    {score}
+                  <span className="district-score" title={`${selectedLayer}: ${band?.label || "Unavailable"}`}>
+                    {score == null ? "—" : `${score}/100`}
                   </span>
                 </button>
               );
@@ -871,6 +870,7 @@ function App() {
               districts={districts}
               selectedLayer={selectedLayer}
               riskByDistrict={riskByDistrict}
+              riskMapLoading={riskMapLoading}
               showConstituencies={showConstituencies}
               lacs={lacs}
               shelters={shelters}
@@ -987,15 +987,61 @@ function App() {
 
                 <section className="panel-section">
                   <div className="section-title">
-                    <h3>{selectedLac ? "District disaster risk" : "Disaster risk"}</h3>
-                    <span className="section-subtitle">{selectedLac ? `${selectedDistrict?.name} district · ${isDemoRisk ? "sample scores" : "illustrative baseline"}` : isDemoRisk ? "Sample demo values" : "Illustrative baseline from hazard levels"}</span>
+                    <h3>{selectedLac ? "District weather preparedness index" : "Weather preparedness index"}</h3>
+                    <span className="section-subtitle">{hasValidatedModelRisk ? `Model output · ${risk.model_provenance}` : isExperimentalRisk ? `Experimental index · ${risk.uncertainty?.confidence || "LOW"} confidence` : "Live index unavailable"}</span>
                   </div>
                   <div className="meter-list">
-                    <RiskMeter label="Overall hazard" value={risk?.overall_risk ?? null} featured />
-                    <RiskMeter label="Flood" value={risk?.flood_risk ?? null} />
-                    <RiskMeter label="Landslide" value={risk?.landslide_risk ?? null} />
-                    <RiskMeter label="Drought" value={risk?.drought_risk ?? null} />
+                    <RiskMeter label="Overall preparedness index" value={risk?.preparedness_index?.score ?? (hasValidatedModelRisk ? risk?.composite_score : null)} featured suffix={riskSuffix} />
+                    <RiskMeter label="Flood scenario index" value={risk?.hazards?.flood?.score ?? null} suffix={riskSuffix} />
+                    <RiskMeter label="Landslide scenario index" value={risk?.hazards?.landslide?.score ?? null} suffix={riskSuffix} />
+                    <RiskMeter label="Drought scenario index" value={risk?.hazards?.drought?.score ?? null} suffix={riskSuffix} />
                   </div>
+                  {isExperimentalRisk && (
+                    <>
+                      <p className="sidebar-caption" role="note">
+                        Experimental index out of 100, not a chance of disaster. It blends forecast scenarios (65%) with recent reanalysis weather (35%). Verified event accuracy and official disaster-susceptibility layers are not available yet.
+                      </p>
+                      <details className="scenario-breakdown">
+                        <summary>View scenario breakdown</summary>
+                        <p>Forecast rainfall is compared with district and season weather patterns from the project’s historical files. Scenario ranges use the spread of those records where available. The historical weather rows include modeled, proxy, or synthetically filled values; they are not confirmed disaster outcomes.</p>
+                        {Object.entries(risk?.preparedness_index?.hazards || {}).map(([hazard, result]) => (
+                          <div className="scenario-row" key={hazard}>
+                            <strong>{hazard[0].toUpperCase() + hazard.slice(1)}</strong>
+                            {hazard === "drought" && <span>Uses forecast and recent rainfall versus ET₀, plus recent soil moisture and dry-spell length.</span>}
+                            <span>Forecast: {result.weather_component == null ? "Unavailable" : `${result.weather_component}/100`}</span>
+                            <span>Recent weather context: {result.antecedent_weather_component == null ? "Unavailable" : `${result.antecedent_weather_component}/100`}</span>
+                            <small>Historical reference: {result.historical_anchor?.scope || "not available"}; {result.historical_anchor?.sample_count ?? 0} rows · {result.historical_anchor?.source_quality || "unknown source quality"}</small>
+                            {result.component_breakdown?.map((component) => (
+                              <span key={component.label}>{component.label}: {component.score == null ? "Unavailable" : `${component.score}/100`} · {component.weight}</span>
+                            ))}
+                            {result.reasons?.map((reason, index) => <small key={`${hazard}-reason-${index}`}>{reason}</small>)}
+                            {result.input_parameters?.length > 0 && (
+                              <details className="scenario-raw-inputs">
+                                <summary>Show input values and sources</summary>
+                                {result.input_parameters.map((parameter) => (
+                                  <div className="scenario-input" key={parameter.label}>
+                                    <span>{parameter.label}</span>
+                                    <strong>{parameter.value == null ? "Unavailable" : `${Number(parameter.value).toFixed(1)} ${parameter.unit}`}</strong>
+                                    <small>{parameter.source}</small>
+                                  </div>
+                                ))}
+                              </details>
+                            )}
+                            <div className="scenario-values">
+                              {(result.scenarios || []).map((scenario) => (
+                                <span key={scenario.name}>{scenario.name} ({Math.round((scenario.precipitation_factor || 1) * 100)}%): {scenario.index == null ? "—" : `${scenario.index}/100`}</span>
+                              ))}
+                            </div>
+                            {Object.entries(result.historical_reference || {}).map(([field, quantiles]) => quantiles && (
+                              <small key={field}>{field.replaceAll("_", " ")}: P50 {quantiles.p50} mm · P90 {quantiles.p90} mm</small>
+                            ))}
+                            {result.data_gaps?.length > 0 && <small>{result.data_gaps.join("; ")}</small>}
+                          </div>
+                        ))}
+                        <small>Weather updated: {risk?.metadata?.weather_updated_at ? new Date(risk.metadata.weather_updated_at).toLocaleString() : "unknown"}</small>
+                      </details>
+                    </>
+                  )}
                 </section>
 
                 <section className="panel-section">

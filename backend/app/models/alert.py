@@ -11,6 +11,8 @@ class Alert(Base):
     title = Column(String(180), nullable=False)
     message = Column(Text, nullable=False)
     severity = Column(String(20), nullable=False)
+    alert_type = Column(String(30), nullable=False, default="warning")
+    disaster_type = Column(String(60), nullable=False, default="General")
     district = Column(String(100), nullable=True)
     status = Column(String(20), nullable=False, default="draft", index=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)

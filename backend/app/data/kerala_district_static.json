@@ -1,0 +1,27 @@
+{
+  "metadata": {
+    "schema_version": "1.0",
+    "district_names_source": "Kerala district GeoJSON and existing DISTRICT_COORDS in backend/app/routers/locations.py",
+    "hazard_reference_sources": [
+      "https://sdma.kerala.gov.in/hazard-maps/",
+      "https://sdma.kerala.gov.in/maps/"
+    ],
+    "note": "Coordinates are representative points already used by the application, not verified polygon centroids. Physiographic priors are intentionally null until the official spatial datasets are ingested and spatially aggregated."
+  },
+  "districts": [
+    {"district_id":"alappuzha","district_name":"Alappuzha","latitude":9.4981,"longitude":76.3388,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"ernakulam","district_name":"Ernakulam","latitude":9.9816,"longitude":76.2999,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"idukki","district_name":"Idukki","latitude":9.85,"longitude":76.9667,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"kannur","district_name":"Kannur","latitude":11.8745,"longitude":75.3704,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"kasaragod","district_name":"Kasaragod","latitude":12.5102,"longitude":74.9852,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"kollam","district_name":"Kollam","latitude":8.8932,"longitude":76.6141,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"kottayam","district_name":"Kottayam","latitude":9.5916,"longitude":76.5222,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"kozhikode","district_name":"Kozhikode","latitude":11.2588,"longitude":75.7804,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"malappuram","district_name":"Malappuram","latitude":11.072,"longitude":76.074,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"palakkad","district_name":"Palakkad","latitude":10.7867,"longitude":76.6548,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"pathanamthitta","district_name":"Pathanamthitta","latitude":9.2648,"longitude":76.787,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"thiruvananthapuram","district_name":"Thiruvananthapuram","latitude":8.5241,"longitude":76.9366,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"thrissur","district_name":"Thrissur","latitude":10.5276,"longitude":76.2144,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null},
+    {"district_id":"wayanad","district_name":"Wayanad","latitude":11.6854,"longitude":76.132,"mean_elevation_m":null,"terrain_ruggedness":null,"western_ghats_susceptibility_tier":null,"coastal_backwater_exposure":null,"major_river_basins":null,"drainage_density_tier":null}
+  ]
+}

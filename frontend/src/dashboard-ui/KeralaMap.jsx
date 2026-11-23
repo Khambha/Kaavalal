@@ -17,7 +17,9 @@ import lacData from "./lac_locations.json";
 import {
   RISK_BANDS,
   getDistrictLayerScore,
+  getDistrictLayerConfidenceScore,
   getRiskBand,
+  getDistrictLayerProvenance,
   normalizeDistrictName,
 } from "./riskScale";
 
@@ -132,6 +134,7 @@ export default function KeralaMap({
   districts = [],
   selectedLayer = "Overall Risk",
   riskByDistrict = {},
+  riskMapLoading = false,
   showConstituencies = true,
   lacs = [],
   shelters = [],
@@ -245,11 +248,11 @@ export default function KeralaMap({
       hasDistrictSelected &&
       normalizeDistrictName(currentDistName) === normalizeDistrictName(distName);
 
-    const band = getRiskBand(getDistrictLayerScore(distName, selectedLayer, riskByDistrict));
+    const band = getRiskBand(getDistrictLayerScore(distName, selectedLayer, riskByDistrict), selectedLayer);
 
     // The risk colour is always kept; selection is shown by outline and emphasis.
     return {
-      fillColor: band.color,
+      fillColor: band?.color || "#d9e1df",
       weight: isSelected ? 3 : 1.2,
       opacity: 1,
       color: isSelected ? INK : "#ffffff",
@@ -273,6 +276,8 @@ export default function KeralaMap({
       latitude: lac.latitude,
       longitude: lac.longitude,
     };
+
+  const legendBands = RISK_BANDS;
 
   return (
     <div className="map-framed-canvas">
@@ -319,12 +324,14 @@ export default function KeralaMap({
             onEachFeature={(feature, layer) => {
               const distName = getFeatureDistrictName(feature);
               const score = getDistrictLayerScore(distName, selectedLayer, riskByDistrict);
-              const band = getRiskBand(score);
+              const confidence = getDistrictLayerConfidenceScore(distName, selectedLayer, riskByDistrict);
+              const band = getRiskBand(score, selectedLayer);
 
               layer.bindTooltip(
                 `<div class="leaflet-custom-tooltip">
                   <strong>${cleanDistrictName(distName)}</strong>
-                  <span>${selectedLayer} ${score}% · ${band.label}</span>
+                  <span>${score == null ? "No live scenario data available" : `${selectedLayer} index ${score}/100 · ${band?.label || ""}`}</span>
+                  ${score == null ? "" : `<span title="Input coverage only; not prediction accuracy">Data confidence ${confidence == null ? "—" : `${confidence}/100`}</span>`}
                  </div>`,
                 { sticky: true, opacity: 1 }
               );
@@ -385,7 +392,19 @@ export default function KeralaMap({
                 eventHandlers={{ click: () => onSelectLac && onSelectLac(toLacObject(lac)) }}
               >
                 <Tooltip direction="top" offset={[0, -5]}>
-                  <span>{lac.lac_name} (LAC {lac.lac_code})</span>
+                  <div className="lac-risk-hover-tooltip">
+                    <strong>{lac.lac_name} (LAC {lac.lac_code})</strong>
+                    <span>{getDistrictLayerScore(lac.district, selectedLayer, riskByDistrict) == null
+                      ? "District-level index unavailable"
+                      : `District-level ${selectedLayer} index ${getDistrictLayerScore(lac.district, selectedLayer, riskByDistrict)}/100`}</span>
+                    {getDistrictLayerScore(lac.district, selectedLayer, riskByDistrict) != null && (
+                      <span title="Input coverage only; not prediction accuracy">
+                        Data confidence {getDistrictLayerConfidenceScore(lac.district, selectedLayer, riskByDistrict) == null
+                          ? "—"
+                          : `${getDistrictLayerConfidenceScore(lac.district, selectedLayer, riskByDistrict)}/100`}
+                      </span>
+                    )}
+                  </div>
                 </Tooltip>
 
                 <Popup pane="citizenPopups" offset={[0, -16]}>
@@ -458,12 +477,12 @@ export default function KeralaMap({
       <div className="map-legend">
         <div className="legend-head">
           <span className="legend-title">{selectedLayer}</span>
-          <span className="legend-tag" title="Where backend hazard inputs are missing, these are placeholder values, not official measurements.">
-            {Object.keys(riskByDistrict).length ? "Calculated + sample" : "Sample scores"}
+          <span className="legend-tag" title="Weather-scenario preparedness index out of 100. Not a disaster probability or official warning.">
+            {riskMapLoading ? "Loading weather scenarios" : getDistrictLayerProvenance(selectedLayer, riskByDistrict) === "MODEL_OUTPUT" ? "Validated model data" : getDistrictLayerProvenance(selectedLayer, riskByDistrict) === "EXPERIMENTAL_INDEX" ? "Experimental index · not probability" : "Live data unavailable"}
           </span>
         </div>
         <ul className="legend-list">
-          {RISK_BANDS.map((band) => (
+          {legendBands.map((band) => (
             <li key={band.key}>
               <span className="legend-swatch" style={{ background: band.color }} />
               <span className="legend-name">{band.label}</span>

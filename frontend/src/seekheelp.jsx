@@ -831,6 +831,8 @@ export default function SeekHelp({ mode = "help", language = "en", defaultLac = 
 
                 <p><strong>{language === "ml" ? "സ്ഥിതി:" : "Status:"}</strong> {t(request.status,language)}{request.eta_estimate_minutes ? ` · ${language === "ml" ? "കണക്കാക്കിയ പ്രതികരണ സമയം" : "Estimated response window"}: ${request.eta_estimate_minutes} ${language === "ml" ? "മിനിറ്റ്" : "minutes"}` : ""}</p>
 
+                {request.review_status && request.review_status !== "Pending" && <div className={`incident-review-message ${request.review_status === "Rejected" ? "rejected" : "verified"}`} role="status"><strong>{request.review_status === "Rejected" ? (language === "ml" ? "റിപ്പോർട്ട് നിരസിച്ചു" : "Report not accepted") : (language === "ml" ? "റിപ്പോർട്ട് പരിശോധിച്ചു" : "Report verified")}</strong><p>{request.review_message}</p></div>}
+
                 <p>
                   <strong>{t("District",language)}:</strong> {request.district}
                   {" · "}

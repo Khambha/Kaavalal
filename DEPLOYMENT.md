@@ -23,6 +23,8 @@ Set these backend environment variables in the host dashboard:
 
 Set optional integrations only if needed: `OPENWEATHER_API_KEY`, `GOOGLE_API_KEY`, and the `SMTP_*` variables. Never use values from a local `.env` file as production secrets without rotating them first. Visit `https://<api-host>/health` after deployment; it should return `{"status":"healthy"}`.
 
+Resource-request batches are saved atomically with a database-backed AI-triage queue. The API schedules triage after the response; to recover queued jobs after a service restart, also create a Render Background Worker from this repository with Root Directory `backend`, Build command `pip install -r requirements.txt`, and Start command `python -m app.workers.resource_triage_worker`. Give it the same database and AI-provider environment variables as the API. The default triage provider is Gemini, so set `GOOGLE_API_KEY` (or configure another supported `CHATBOT_PROVIDER` and its key). If AI credentials or weather/risk inputs are unavailable, the request remains visible for manual admin review with triage marked unavailable.
+
 The current incident-photo endpoint reads and writes `backend/uploads/help_requests`. A local folder is not durable across service restarts and is not shared across instances. Before relying on photo attachments, change this storage to an object store such as S3 or Cloudinary and set its credentials in the backend. Core role workflows can be exercised without attachments.
 
 ## 2. Deploy the citizen and responder app to Vercel

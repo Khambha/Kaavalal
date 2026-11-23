@@ -511,6 +511,29 @@
 }
 .dashboard-ui .panel-note.is-inline { margin: 0 0 10px; }
 
+.dashboard-ui .scenario-breakdown {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.dashboard-ui .scenario-breakdown summary { color: var(--ink-2); cursor: pointer; font-weight: 700; }
+.dashboard-ui .scenario-breakdown > p { margin: 8px 0; }
+.dashboard-ui .scenario-row { display: grid; gap: 3px; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+.dashboard-ui .scenario-row > strong { color: var(--text); text-transform: capitalize; }
+.dashboard-ui .scenario-values { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.dashboard-ui .scenario-breakdown small { display: block; margin-top: 5px; }
+.dashboard-ui .scenario-raw-inputs { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line-soft); }
+.dashboard-ui .scenario-raw-inputs summary { font-size: 11.5px; }
+.dashboard-ui .scenario-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; padding: 5px 0; border-bottom: 1px solid var(--line-soft); }
+.dashboard-ui .scenario-input strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.dashboard-ui .scenario-input small { grid-column: 1 / -1; margin: 0; }
+.dashboard-ui .lac-risk-hover-tooltip { display: grid; gap: 3px; min-width: 150px; }
+.dashboard-ui .lac-risk-hover-tooltip strong { color: var(--text); }
+
 .dashboard-ui .panel-empty { padding: 28px 24px; text-align: left; color: var(--muted); }
 .dashboard-ui .panel-empty-icon { display: inline-grid; place-items: center; width: 44px; height: 44px; margin-bottom: 14px; border-radius: 12px; background: var(--tint); color: var(--ink-2); }
 .dashboard-ui .panel-empty h3 { font-family: var(--font-display); font-size: 18px; color: var(--text); margin-bottom: 6px; }

@@ -12,6 +12,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.alert import Alert
 from app.models.resource_item import ResourceItem
 from app.models.resource_request import ResourceRequest
+from app.models.resource_request_batch import ResourceRequestBatch  # noqa: F401
 from app.models.resource_asset import ResourceAsset
 from app.models.resource_asset_assignment import ResourceAssetAssignment
 from app.models.resource_transaction import ResourceTransaction
@@ -92,6 +93,14 @@ app.add_middleware(
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Add alert metadata to databases created before incident verification was added.
+alert_columns = {column["name"] for column in inspect(engine).get_columns("alerts")}
+with engine.begin() as connection:
+    if "alert_type" not in alert_columns:
+        connection.execute(text("ALTER TABLE alerts ADD COLUMN alert_type VARCHAR(30) NOT NULL DEFAULT 'warning'"))
+    if "disaster_type" not in alert_columns:
+        connection.execute(text("ALTER TABLE alerts ADD COLUMN disaster_type VARCHAR(60) NOT NULL DEFAULT 'General'"))
+
 # Add responder availability to existing local user tables.
 user_columns = {column["name"] for column in inspect(engine).get_columns("users")}
 if "is_available" not in user_columns:
@@ -120,6 +129,8 @@ with engine.begin() as connection:
         connection.execute(text("ALTER TABLE resource_items ADD COLUMN inventory_mode VARCHAR(20) NOT NULL DEFAULT 'Bulk'"))
 resource_request_columns = {column["name"] for column in inspect(engine).get_columns("resource_requests")}
 with engine.begin() as connection:
+    if "transaction_id" not in resource_request_columns:
+        connection.execute(text("ALTER TABLE resource_requests ADD COLUMN transaction_id INTEGER NULL"))
     if "quantity_quarantined" not in resource_request_columns:
         connection.execute(text("ALTER TABLE resource_requests ADD COLUMN quantity_quarantined INTEGER NOT NULL DEFAULT 0"))
     if "priority" not in resource_request_columns:
@@ -128,6 +139,33 @@ with engine.begin() as connection:
         connection.execute(text("ALTER TABLE resource_requests ADD COLUMN rejection_reason TEXT NULL"))
     if "inventory_mode" not in resource_request_columns:
         connection.execute(text("ALTER TABLE resource_requests ADD COLUMN inventory_mode VARCHAR(20) NOT NULL DEFAULT 'Bulk'"))
+    if "category" not in resource_request_columns:
+        connection.execute(text("ALTER TABLE resource_requests ADD COLUMN category VARCHAR(60) NULL"))
+if next((column for column in inspect(engine).get_columns("resource_requests") if column["name"] == "resource_id"), {}).get("nullable", True) is False:
+    with engine.begin() as connection:
+        if engine.dialect.name == "mysql":
+            connection.execute(text("ALTER TABLE resource_requests MODIFY resource_id INTEGER NULL"))
+        elif engine.dialect.name == "postgresql":
+            connection.execute(text("ALTER TABLE resource_requests ALTER COLUMN resource_id DROP NOT NULL"))
+        else:
+            raise RuntimeError("Resource requests require nullable resource IDs for custom item requests; migrate this SQLite database to a supported SQL database first.")
+resource_request_indexes = {index["name"] for index in inspect(engine).get_indexes("resource_requests")}
+if "ix_resource_requests_transaction_id" not in resource_request_indexes:
+    with engine.begin() as connection:
+        connection.execute(text("CREATE INDEX ix_resource_requests_transaction_id ON resource_requests (transaction_id)"))
+batch_columns = {column["name"]: column for column in inspect(engine).get_columns("resource_request_batches")}
+with engine.begin() as connection:
+    if "triage_started_at" not in batch_columns:
+        connection.execute(text("ALTER TABLE resource_request_batches ADD COLUMN triage_started_at DATETIME NULL"))
+tx_id_column = batch_columns.get("tx_id")
+if tx_id_column and getattr(tx_id_column["type"], "length", None) != 60:
+    with engine.begin() as connection:
+        if engine.dialect.name == "mysql":
+            connection.execute(text("ALTER TABLE resource_request_batches MODIFY tx_id VARCHAR(60) NOT NULL"))
+        elif engine.dialect.name == "postgresql":
+            connection.execute(text("ALTER TABLE resource_request_batches ALTER COLUMN tx_id TYPE VARCHAR(60)"))
+        else:
+            raise RuntimeError("Resource transaction IDs require a database migration to VARCHAR(60).")
 transaction_columns = {column["name"] for column in inspect(engine).get_columns("resource_transactions")}
 if "transaction_type" not in transaction_columns:
     with engine.begin() as connection:
@@ -148,6 +186,16 @@ with engine.begin() as connection:
         connection.execute(text("ALTER TABLE help_requests ADD COLUMN client_request_id VARCHAR(36) NULL"))
     if "eta_estimate_minutes" not in help_request_columns:
         connection.execute(text("ALTER TABLE help_requests ADD COLUMN eta_estimate_minutes INTEGER NULL"))
+    if "review_status" not in help_request_columns:
+        connection.execute(text("ALTER TABLE help_requests ADD COLUMN review_status VARCHAR(20) NOT NULL DEFAULT 'Pending'"))
+    if "review_message" not in help_request_columns:
+        connection.execute(text("ALTER TABLE help_requests ADD COLUMN review_message TEXT NULL"))
+    if "reviewed_by_admin_id" not in help_request_columns:
+        connection.execute(text("ALTER TABLE help_requests ADD COLUMN reviewed_by_admin_id INTEGER NULL"))
+    if "reviewed_at" not in help_request_columns:
+        connection.execute(text("ALTER TABLE help_requests ADD COLUMN reviewed_at DATETIME NULL"))
+    if "triage_note" not in help_request_columns:
+        connection.execute(text("ALTER TABLE help_requests ADD COLUMN triage_note TEXT NULL"))
 help_request_indexes = inspect(engine).get_indexes("help_requests")
 has_unique_client_request_index = any(
     index.get("unique") and "client_request_id" in index.get("column_names", [])

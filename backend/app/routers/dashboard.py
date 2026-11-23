@@ -1,3 +1,7 @@
+import asyncio
+import json
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -8,18 +12,31 @@ from app.models.weather import WeatherData
 from app.models.rainfall import RainfallData
 from app.models.hazard import HazardData
 from app.models.risk import RiskData
-from app.services.risk_calculator import (
-    REQUIRED_HAZARDS,
-    calculate_baseline_risk,
-    score_hazard_level,
-)
 from app.services.imd_mock_importer import import_imd_mock_data
+from app.services.risk_engine import assess_location
 
 
 router = APIRouter(
     prefix="/api/dashboard",
     tags=["Dashboard"],
 )
+
+_STATIC_DISTRICTS = {
+    item["district_id"]: item
+    for item in json.loads(
+        (Path(__file__).resolve().parents[1] / "data" / "kerala_district_static.json").read_text(encoding="utf-8")
+    )["districts"]
+}
+
+
+def _district_coordinates(district: Location):
+    if district.latitude is not None and district.longitude is not None:
+        return district.latitude, district.longitude
+    key = "".join(character for character in district.name.lower() if character.isalpha())
+    static = _STATIC_DISTRICTS.get(key)
+    if static:
+        return static["latitude"], static["longitude"]
+    return None, None
 
 
 def get_location_or_404(db: Session, location_id: int) -> Location:
@@ -41,42 +58,35 @@ def get_location_or_404(db: Session, location_id: int) -> Location:
 
 
 def serialize_risk(risk: RiskData | None, hazards: HazardData | None = None):
-    """Return stored risk, or calculate the existing baseline from hazard labels."""
+    """Return legacy scores with explicit provenance; never infer from labels."""
     if risk is not None:
         return {
-            "flood_risk": risk.flood_risk,
-            "landslide_risk": risk.landslide_risk,
-            "drought_risk": risk.drought_risk,
-            "overall_risk": risk.overall_risk,
             "recorded_at": risk.recorded_at,
-            "score_type": "illustrative_baseline",
+            "score_type": "stored_unverified",
+            "scores_available": False,
         }
+    return None
 
-    if hazards is None:
-        return None
-    scores = {
-        field: score_hazard_level(getattr(hazards, field))
-        for field in REQUIRED_HAZARDS
-    }
-    if any(value is None for value in scores.values()):
-        return None
 
-    flood = scores["flood_level"]
-    landslide = scores["landslide_level"]
-    drought = scores["drought_level"]
-    return {
-        "flood_risk": flood,
-        "landslide_risk": landslide,
-        "drought_risk": drought,
-        "overall_risk": round((flood + landslide + drought) / 3, 2),
-        "recorded_at": hazards.recorded_at,
-        "score_type": "illustrative_baseline",
-    }
+@router.get("/risk/{district_id}")
+async def get_live_district_risk(district_id: int, db: Session = Depends(get_db)):
+    """Fetch live weather features and return a provenance-safe risk contract."""
+    district = (db.query(Location).filter(
+        Location.id == district_id, Location.location_type == "DISTRICT"
+    ).first())
+    if district is None:
+        raise HTTPException(status_code=404, detail="District not found")
+    latitude, longitude = _district_coordinates(district)
+    if latitude is None or longitude is None:
+        raise HTTPException(status_code=422, detail="District coordinates are required")
+    return await asyncio.to_thread(
+        assess_location, district.id, district.name, latitude, longitude
+    )
 
 
 @router.get("/risk-map")
-def get_district_risk_map(db: Session = Depends(get_db)):
-    """Return stored or baseline-calculated district risk for map colouring."""
+async def get_district_risk_map(db: Session = Depends(get_db)):
+    """Fetch current Open-Meteo inputs and experimental indices for map districts."""
     try:
         districts = (
             db.query(Location)
@@ -84,24 +94,28 @@ def get_district_risk_map(db: Session = Depends(get_db)):
             .order_by(Location.name)
             .all()
         )
+        semaphore = asyncio.Semaphore(5)
+
+        async def evaluate(district: Location):
+            latitude, longitude = _district_coordinates(district)
+            if latitude is None or longitude is None:
+                return district, None
+            async with semaphore:
+                result = await asyncio.to_thread(
+                    assess_location, district.id, district.name, latitude, longitude
+                )
+            return district, result
+
+        evaluations = await asyncio.gather(*(evaluate(district) for district in districts))
         results = []
-        for district in districts:
-            hazards = (
-                db.query(HazardData)
-                .filter(HazardData.location_id == district.id)
-                .order_by(HazardData.recorded_at.desc())
-                .first()
-            )
-            risk = (
-                db.query(RiskData)
-                .filter(RiskData.location_id == district.id)
-                .order_by(RiskData.recorded_at.desc())
-                .first()
-            )
+        for district, result in evaluations:
             results.append({
                 "district": district.name,
-                "risk": serialize_risk(risk, hazards),
-                "source": "stored_risk" if risk else "calculated_from_hazard_levels" if hazards else None,
+                "district_id": district.id,
+                "risk": result,
+                "status": result.get("status", "INSUFFICIENT_DATA") if result else "INSUFFICIENT_DATA",
+                "source": result.get("metadata", {}).get("source") if result else None,
+                "metadata": result.get("metadata") if result else None,
             })
         return results
     except SQLAlchemyError:
@@ -212,34 +226,27 @@ def get_dashboard(
 
 
 @router.post("/{location_id}/calculate-risk")
-def calculate_location_risk(
+async def calculate_location_risk(
     location_id: int,
     db: Session = Depends(get_db),
 ):
-    """Calculate and return the illustrative baseline risk for a location."""
+    """Refresh live weather features; scores stay unavailable without a validated model."""
 
     try:
         get_location_or_404(db, location_id)
 
-        risk = calculate_baseline_risk(db, location_id)
-
-        return {
-            "location_id": risk.location_id,
-            "flood_risk": risk.flood_risk,
-            "landslide_risk": risk.landslide_risk,
-            "drought_risk": risk.drought_risk,
-            "overall_risk": risk.overall_risk,
-            "recorded_at": risk.recorded_at,
-            "score_type": "illustrative_baseline",
-        }
+        location = get_location_or_404(db, location_id)
+        latitude, longitude = _district_coordinates(location)
+        if location.location_type.upper() not in {"DISTRICT", "LAC", "CONSTITUENCY"}:
+            raise HTTPException(status_code=422, detail="Live risk inputs are unavailable for this location type")
+        latitude = location.latitude if location.latitude is not None else latitude
+        longitude = location.longitude if location.longitude is not None else longitude
+        if latitude is None or longitude is None:
+            raise HTTPException(status_code=422, detail="Location coordinates are required")
+        return await asyncio.to_thread(assess_location, location.id, location.name, latitude, longitude)
 
     except HTTPException:
         raise
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=str(exc),
-        )
     except SQLAlchemyError:
         db.rollback()
         raise HTTPException(

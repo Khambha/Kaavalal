@@ -36,55 +36,14 @@ export function getFeatureDistrictName(feature) {
   );
 }
 
-// Sophisticated, harmonious hazard scores per district
-const DISTRICT_HAZARD_SCORES = {
-  wayanad: { overall: 75, flood: 65, landslide: 92, drought: 15, rainfall: 82 },
-  idukki: { overall: 78, flood: 72, landslide: 88, drought: 20, rainfall: 85 },
-  pathanamthitta: { overall: 65, flood: 82, landslide: 68, drought: 15, rainfall: 75 },
-  alappuzha: { overall: 70, flood: 90, landslide: 5, drought: 10, rainfall: 78 },
-  ernakulam: { overall: 58, flood: 76, landslide: 15, drought: 15, rainfall: 70 },
-  thrissur: { overall: 55, flood: 72, landslide: 28, drought: 20, rainfall: 68 },
-  kottayam: { overall: 58, flood: 78, landslide: 32, drought: 15, rainfall: 72 },
-  kozhikode: { overall: 54, flood: 62, landslide: 55, drought: 20, rainfall: 74 },
-  malappuram: { overall: 52, flood: 58, landslide: 50, drought: 25, rainfall: 66 },
-  kannur: { overall: 45, flood: 52, landslide: 35, drought: 20, rainfall: 68 },
-  kasaragod: { overall: 42, flood: 48, landslide: 25, drought: 35, rainfall: 62 },
-  palakkad: { overall: 50, flood: 38, landslide: 22, drought: 75, rainfall: 45 },
-  kollam: { overall: 46, flood: 55, landslide: 25, drought: 22, rainfall: 60 },
-  thiruvananthapuram: { overall: 45, flood: 52, landslide: 25, drought: 25, rainfall: 58 },
-};
-
-function getDistrictLayerScore(districtName, layer) {
-  const key = normalizeDistrictName(districtName);
-  const profile = DISTRICT_HAZARD_SCORES[key] || {
-    overall: 45,
-    flood: 45,
-    landslide: 45,
-    drought: 45,
-    rainfall: 45,
-  };
-
-  switch (layer) {
-    case "Flood":
-      return profile.flood;
-    case "Landslide":
-      return profile.landslide;
-    case "Drought":
-      return profile.drought;
-    case "Rainfall":
-      return profile.rainfall;
-    case "Overall Risk":
-    default:
-      return profile.overall;
-  }
-}
+function getDistrictLayerScore() { return null; }
 
 // Curated pastel/intelligence color palette (matching Image 1)
 function getLayerColor(score, isSelected) {
+  if (score == null) return "#d9e1df";
   if (isSelected) {
     return "#5ea396"; // Highlighted active teal
   }
-
   if (score >= 75) return "#d97d54"; // High - terracotta coral
   if (score >= 60) return "#e59e67"; // Moderate-high - warm amber
   if (score >= 45) return "#7ebaa9"; // Moderate - sage teal
@@ -366,7 +325,7 @@ export default function KeralaMap({
               layer.bindTooltip(
                 `<div class="leaflet-custom-tooltip">
                   <strong>${cleanName}</strong>
-                  <span>${selectedLayer}: ${score}%</span>
+                  <span>${score == null ? "Risk score unavailable" : `${selectedLayer}: ${score}%`}</span>
                  </div>`,
                 { sticky: true, opacity: 0.95 }
               );

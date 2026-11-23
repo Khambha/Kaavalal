@@ -24,6 +24,8 @@ def published_alerts(db: Session = Depends(get_db)):
             "title": alert.title,
             "message": alert.message,
             "severity": alert.severity,
+            "alert_type": getattr(alert, "alert_type", "warning"),
+            "disaster_type": getattr(alert, "disaster_type", "General"),
             "district": alert.district,
             "published_at": alert.published_at,
             "expires_at": alert.expires_at,
