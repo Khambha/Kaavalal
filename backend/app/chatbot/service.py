@@ -12,8 +12,8 @@ from .models import ChatSession, ChatMessage
 log = logging.getLogger("thunai")
 
 FALLBACK = {
-    "en": "Sorry, I'm having trouble right now. For emergencies call 112; for flood help call 1077.",
-    "ml": "ക്ഷമിക്കണം, ഇപ്പോൾ ഒരു തടസ്സമുണ്ട്. അടിയന്തര സാഹചര്യത്തിൽ 112 / 1077 ൽ വിളിക്കുക.",
+    "en": "Thunai's AI service is temporarily unavailable, so I can't look up current information right now. For immediate danger call 112; for district disaster assistance call 1077. Check official KSDMA/IMD updates for current alerts.",
+    "ml": "തുണയുടെ AI സേവനം താൽക്കാലികമായി ലഭ്യമല്ല; അതിനാൽ ഇപ്പോഴത്തെ വിവരങ്ങൾ പരിശോധിക്കാൻ കഴിയില്ല. അടിയന്തര അപകടത്തിൽ 112-ലും ജില്ലാ ദുരന്തസഹായത്തിന് 1077-ലും വിളിക്കുക. പുതിയ മുന്നറിയിപ്പുകൾ KSDMA/IMD-യിൽ പരിശോധിക്കുക.",
 }
 QUICK_REPLIES = {
     "en": ["Nearest relief camp", "Water kiosk near me", "Hospitals in my district", "Flood risk today"],
@@ -27,17 +27,16 @@ _RISK_QUESTION_RE = re.compile(
 
 
 def _quick_risk_answer(db: Session, text: str, language: str, context=None):
-    """Answer short risk lookups from Kaavalal's DB without the multi-call LLM agent."""
+    """Answer short risk questions from the live risk engine without the LLM agent."""
     if len(text.split()) > 12 or not _RISK_QUESTION_RE.search(text):
         return None
 
     hazards = (
-        (r"\b(flood|flooding)\b|വെള്ളപ്പൊക്കം", "flood_risk", "flood"),
-        (r"\b(landslide|landslip)\b|ഉരുൾപൊട്ടൽ|മണ്ണിടിച്ചിൽ", "landslide_risk", "landslide"),
-        (r"\b(drought)\b|വരൾച്ച", "drought_risk", "drought"),
+        (r"\b(flood|flooding)\b|വെള്ളപ്പൊക്കം", "flood"),
+        (r"\b(landslide|landslip)\b|ഉരുൾപൊട്ടൽ|മണ്ണിടിച്ചിൽ", "landslide"),
+        (r"\b(drought)\b|വരൾച്ച", "drought"),
     )
-    selected = next(((field, label) for pattern, field, label in hazards if re.search(pattern, text, re.IGNORECASE)), None)
-    field, label = selected if selected else ("overall_risk", "overall")
+    selected = next((hazard for pattern, hazard in hazards if re.search(pattern, text, re.IGNORECASE)), "")
     district = config.normalize_district(text)
     if not district and context:
         district = config.normalize_district(context.get("district"))
@@ -45,39 +44,18 @@ def _quick_risk_answer(db: Session, text: str, language: str, context=None):
     if not district:
         return "ഏത് ജില്ലയുടെ അപകടസാധ്യതയാണ് അറിയേണ്ടത്?" if language == "ml" else "Which Kerala district should I check?"
 
-    from app.models.location import Location
-    from app.models.risk import RiskData
-
     try:
-        record = (
-            db.query(RiskData)
-            .join(Location, Location.id == RiskData.location_id)
-            .filter(Location.name == district, Location.location_type == "DISTRICT")
-            .order_by(RiskData.recorded_at.desc())
-            .first()
-        )
+        from .tools import get_district_risk
+        # This fast path uses the exact live-weather tool available to the agent;
+        # it must never fall back to legacy stored scores that aren't validated.
+        return get_district_risk.invoke({"district": district, "hazard": selected, "language": language})
     except Exception:
-        log.exception("Thunai quick risk lookup failed for district=%s", district)
+        log.exception("Thunai live risk lookup failed for district=%s", district)
         return (
-            f"ഇപ്പോൾ {district} ജില്ലയുടെ അപകടസാധ്യതാ വിവരങ്ങൾ ലഭ്യമല്ല. ഔദ്യോഗിക മുന്നറിയിപ്പുകൾ KSDMA/IMD-യിൽ പരിശോധിക്കുക."
+            f"ഇപ്പോൾ {district} ജില്ലയിലെ തത്സമയ കാലാവസ്ഥ/റിസ്ക് വിവരങ്ങൾ ലഭ്യമല്ല. ഔദ്യോഗിക മുന്നറിയിപ്പുകൾ KSDMA/IMD-യിൽ പരിശോധിക്കുക."
             if language == "ml" else
-            f"Risk data for {district} is unavailable right now. Check official KSDMA/IMD alerts for current warnings."
+            f"Live weather/risk data for {district} is unavailable right now. Check official KSDMA/IMD alerts; I won't infer a risk level."
         )
-    if record is None or getattr(record, field) is None:
-        return (
-            f"{district} ജില്ലയ്ക്ക് നിലവിൽ സംഭരിച്ച അപകടസാധ്യതാ വിലയിരുത്തൽ ലഭ്യമല്ല. ഔദ്യോഗിക മുന്നറിയിപ്പുകൾ KSDMA/IMD-യിൽ പരിശോധിക്കുക."
-            if language == "ml" else
-            f"I don't have a stored risk assessment for {district}. Check official KSDMA/IMD alerts for current warnings."
-        )
-
-    score = float(getattr(record, field))
-    band = "Low" if score < 40 else "Moderate" if score < 60 else "High" if score < 75 else "Severe"
-    recorded = record.recorded_at.strftime("%Y-%m-%d %H:%M") if record.recorded_at else "time unavailable"
-    if language == "ml":
-        return (f"{district} ജില്ലയിലെ ഏറ്റവും പുതിയ {label} അപകടസാധ്യതാ കണക്ക് {score:g}/100 ({band}) ആണ്; രേഖപ്പെടുത്തിയത് {recorded}. "
-                "ഇത് കാവലാളിന്റെ സൂചനാപരമായ വിലയിരുത്തലാണ്, തത്സമയ ഔദ്യോഗിക പ്രവചനമല്ല. ഔദ്യോഗിക മുന്നറിയിപ്പുകൾ KSDMA/IMD-യിൽ പരിശോധിക്കുക.")
-    return (f"Kaavalal's latest {label} risk estimate for {district} is {score:g}/100 ({band}), recorded {recorded}. "
-            "This is an illustrative Kaavalal estimate, not a live official forecast. Check KSDMA/IMD for current warnings.")
 
 
 def _history(db: Session, session_id: str):
@@ -124,8 +102,9 @@ def _run_agent(history, text: str, language: str, context=None):
 def handle_message(db: Session, session_id, text: str, language: str, context=None, user_id=None):
     started_at = time.perf_counter()
     existing = db.get(ChatSession, session_id) if session_id else None
-    # A session belongs to whoever created it: never continue someone else's conversation.
-    if existing is not None and existing.user_id is not None and existing.user_id != user_id:
+    # Keep anonymous and authenticated conversation histories separate, and never
+    # continue another account's conversation when a browser's stored session id remains.
+    if existing is not None and existing.user_id != user_id:
         existing, session_id = None, None
     if existing is None:
         session_id = session_id or str(uuid.uuid4())
@@ -133,10 +112,6 @@ def handle_message(db: Session, session_id, text: str, language: str, context=No
             session_id = str(uuid.uuid4())
         db.add(ChatSession(id=session_id, user_id=user_id, language=language))
         db.commit()
-    elif existing.user_id is None and user_id is not None:
-        existing.user_id = user_id
-        db.commit()
-
     history = _history(db, session_id)
     db.add(ChatMessage(session_id=session_id, role="user", content=text))
     db.commit()

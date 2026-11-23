@@ -1,8 +1,16 @@
 """Central settings for the chatbot. Reads from backend/.env."""
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parents[2]
+load_dotenv(BASE_DIR / ".env")
+
+
+def _backend_path(env_name: str, default: str) -> str:
+    """Resolve chatbot paths from the backend directory, independent of process cwd."""
+    configured = Path(os.getenv(env_name, default)).expanduser()
+    return str(configured if configured.is_absolute() else (BASE_DIR / configured).resolve())
 
 # Which AI model runs the chatbot: gemini | groq | openrouter | ollama | anthropic
 PROVIDER = os.getenv("CHATBOT_PROVIDER", "gemini").strip().lower()
@@ -26,8 +34,8 @@ EMBEDDING_MODEL = os.getenv(
     "CHATBOT_EMBEDDING_MODEL",
     "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
 )
-VECTOR_DIR = os.getenv("CHATBOT_VECTOR_DIR", "./chatbot_vectorstore")
-KB_DIR = os.getenv("CHATBOT_KB_DIR", "./app/chatbot/knowledge")
+VECTOR_DIR = _backend_path("CHATBOT_VECTOR_DIR", "chatbot_vectorstore")
+KB_DIR = _backend_path("CHATBOT_KB_DIR", "app/chatbot/knowledge")
 RATE_LIMIT = os.getenv("CHATBOT_RATE_LIMIT", "20/minute")
 KSDMA_DATA_READY = os.getenv("CHATBOT_KSDMA_DATA_READY", "false").strip().lower() == "true"
 

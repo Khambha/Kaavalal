@@ -45,6 +45,7 @@
   max-height: none; box-shadow: none; border: 1px solid #dfe5e2; border-radius: 12px;
 }
 .kc-ctx { background: #e6f2ee; color: #0b5d4a; font-size: 12px; padding: 4px 12px; border-bottom: 1px solid #d3e6df; }
+.kc-health { background: #fff4df; color: #704900; border-bottom: 1px solid #f0d9a7; font-size: 12px; line-height: 1.4; padding: 6px 12px; }
 
 .kc-loc { background: #f4f6f5; padding: 6px 12px 0; font-size: 12px; color: #0b5d4a; }
 .kc-loc button { background: none; border: 1px solid #0b5d4a; color: #0b5d4a; border-radius: 12px; padding: 3px 10px; font-size: 12px; cursor: pointer; }

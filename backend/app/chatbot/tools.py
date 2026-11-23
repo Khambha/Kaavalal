@@ -140,13 +140,71 @@ def find_shelters(district: str) -> str:
 
 
 @tool
-def get_district_risk(district: str) -> str:
+def get_district_risk(district: str, hazard: str = "", language: str = "en") -> str:
     """Get the latest Kaavalal risk assessment (flood, landslide, drought) for a Kerala district.
     These are model/assessment outputs, not official forecasts. Mention the assessment time."""
-    rows, err = _by_district("risk", district, 6)
-    if err:
-        return err
-    return str(rows) if rows else "No risk assessment is available for that district yet."
+    canonical = normalize_district(district)
+    if not canonical:
+        return NOT_KERALA
+    from app.models.location import Location
+    from app.routers.dashboard import _district_coordinates
+    from app.services.risk_engine import assess_location
+
+    db = _session()
+    try:
+        location = (db.query(Location).filter(
+            Location.name == canonical, Location.location_type == "DISTRICT"
+        ).first())
+        if location is None:
+            return f"Live risk data for {canonical} is unavailable because its district record was not found."
+        latitude, longitude = _district_coordinates(location)
+        if latitude is None or longitude is None:
+            return f"Live weather features for {canonical} are unavailable because district coordinates are missing."
+        location_id, location_name = location.id, location.name
+    finally:
+        db.close()
+
+    result = assess_location(location_id, location_name, latitude, longitude)
+    if result.get("status") == "INSUFFICIENT_DATA" or not result.get("hazards"):
+        return f"Current weather/risk data for {canonical} is unavailable. Do not infer a risk level; check official KSDMA/IMD alerts."
+    hazard = hazard.strip().lower()
+    if hazard and hazard not in {"flood", "landslide", "drought"}:
+        return "Choose flood, landslide or drought, or leave hazard blank for all three."
+    semantics = result.get("score_semantics")
+    updated = (result.get("metadata") or {}).get("weather_updated_at", "time unavailable")
+    confidence = (result.get("uncertainty") or {}).get("confidence_score")
+    is_malayalam = language == "ml"
+    lines = [
+        f"{canonical} ജില്ലയിലെ കാവലാളിന്റെ ഏറ്റവും പുതിയ കണക്ക്; കാലാവസ്ഥാ വിവരങ്ങൾ പുതുക്കിയത് {updated}."
+        if is_malayalam else f"Current Kaavalal result for {canonical}; weather updated {updated}."
+    ]
+    hazards = (hazard,) if hazard else ("flood", "landslide", "drought")
+    labels_ml = {"flood": "വെള്ളപ്പൊക്കം", "landslide": "ഉരുൾപൊട്ടൽ", "drought": "വരൾച്ച"}
+    for hazard_name in hazards:
+        item = result["hazards"].get(hazard_name) or {}
+        label = labels_ml[hazard_name] if is_malayalam else hazard_name.title()
+        if semantics == "CALIBRATED_PROBABILITY" and item.get("probability") is not None:
+            value = round(float(item["probability"]) * 100, 1)
+            lines.append(f"{label}: മോഡൽ സാധ്യത {value}%." if is_malayalam else f"{label}: {value}% model probability.")
+        elif item.get("score") is not None:
+            lines.append(
+                f"{label}: {item['score']}/100 പരീക്ഷണാത്മക കാലാവസ്ഥാ സൂചിക; ഇത് സംഭവസാധ്യതയുടെ ശതമാനമല്ല."
+                if is_malayalam else
+                f"{label}: {item['score']}/100 experimental weather-scenario index, not a probability."
+            )
+        else:
+            lines.append(f"{label}: ലഭ്യമല്ല." if is_malayalam else f"{label}: unavailable.")
+    if confidence is not None:
+        lines.append(
+            f"വിശ്വാസ സ്കോർ: {confidence}/100; ഇത് ഇൻപുട്ട്/മോഡൽ വിശ്വാസ്യതയാണ്, പ്രവചന കൃത്യതയല്ല."
+            if is_malayalam else
+            f"Confidence score: {confidence}/100; this measures input/model confidence, not prediction accuracy."
+        )
+    lines.append(
+        "ഔദ്യോഗിക മുന്നറിയിപ്പുകൾക്ക് KSDMA/IMD അറിയിപ്പുകൾ പരിശോധിക്കുക; ഇത് ഔദ്യോഗിക മുന്നറിയിപ്പല്ല."
+        if is_malayalam else "Use official KSDMA/IMD alerts for warnings; this output is not an official warning."
+    )
+    return "\n".join(lines)
 
 
 @tool
@@ -161,10 +219,11 @@ def get_rainfall(district: str) -> str:
 @tool
 def get_past_disasters(district: str) -> str:
     """Get past recorded disasters (floods, landslides etc.) for a Kerala district."""
-    rows, err = _by_district("history", district, 5)
-    if err:
-        return err
-    return str(rows) if rows else "No historical disaster records found for that district."
+    canonical = normalize_district(district)
+    if not canonical:
+        return NOT_KERALA
+    return (f"Verified historical disaster records for {canonical} are not connected to Thunai yet. "
+            "Do not treat model-training or synthetic rows as confirmed events. Check official KSDMA records.")
 
 
 @tool
@@ -384,10 +443,15 @@ def get_taluk_emergency_contacts(district: str, taluk: str = "") -> str:
 def search_guidelines(query: str) -> str:
     """Search the disaster-safety knowledge base (flood, landslide, lightning,
     first aid, evacuation, preparedness) for official guidance."""
-    docs = rag_search(query, k=4)
+    try:
+        docs = rag_search(query, k=4)
+    except Exception:
+        import logging
+        logging.getLogger("thunai.rag").exception("Knowledge-base retrieval failed")
+        return "The safety knowledge base is temporarily unavailable. Do not invent instructions; for immediate danger call 112 and follow official KSDMA/IMD guidance."
     if not docs:
-        return "No relevant guidance found."
-    return "\n\n---\n\n".join(f"[{d.metadata.get('source')}]\n{d.page_content}" for d in docs)
+        return "No sufficiently relevant safety guidance was found in the knowledge base. Do not invent instructions; for immediate danger call 112 and follow official KSDMA/IMD guidance."
+    return "\n\n---\n\n".join(f"Source: {d.metadata.get('source', 'Kaavalal safety knowledge base')}\n{d.page_content}" for d in docs)
 
 
 @tool

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { sendMessage, sendFeedback } from "../../services/chatApi";
+import { sendMessage, sendFeedback, getChatStatus } from "../../services/chatApi";
 import "./chat.css";
 
 /**
@@ -21,7 +21,14 @@ const T = {
     welcome: "Hi, I'm Thunai. I can help with flood and landslide risk, rainfall, alerts, shelters with free places, your incident reports and safety guidance across Kerala.",
     emergency: "Emergency? Call 112",
     disclaimer: "Informational only. Not a replacement for emergency services.",
-    error: "Something went wrong. For emergencies call 112.",
+    error: "The request could not be completed. Please try again. For emergencies call 112.",
+    network: "I can't reach Kaavalal right now. Check your connection or try again later. For emergencies call 112.",
+    service: "Thunai's service is temporarily unavailable. I can't verify live information right now. For immediate danger call 112; for district disaster assistance call 1077.",
+    timeout: "That lookup took too long and may not have completed. Please try again. For emergencies call 112.",
+    statusDb: "Chatbot database is unavailable.",
+    statusProvider: "AI provider credentials are not configured. General emergency numbers remain available.",
+    statusKnowledge: "The safety knowledge index is missing. Safety answers may be unavailable.",
+    statusReference: "KSDMA reference data is disabled or has no imported records. Camp, hospital and kiosk lookup may be unavailable.",
     limited: "Too many messages. Please wait a minute.",
     viewing: (d) => `Showing help for ${d}`,
     locate: "📍 Use my location",
@@ -35,7 +42,14 @@ const T = {
     welcome: "നമസ്കാരം, ഞാൻ തുണ. കേരളത്തിലെ വെള്ളപ്പൊക്ക/ഉരുൾപൊട്ടൽ സാധ്യത, മഴ, മുന്നറിയിപ്പുകൾ, ക്യാമ്പുകളിലെ ഒഴിവുകൾ, നിങ്ങളുടെ റിപ്പോർട്ടുകളുടെ നില, സുരക്ഷാ മാർഗ്ഗനിർദേശം എന്നിവയിൽ സഹായിക്കാം.",
     emergency: "അടിയന്തരം? 112 വിളിക്കുക",
     disclaimer: "വിവരങ്ങൾക്ക് മാത്രം. അടിയന്തര സേവനങ്ങൾക്ക് പകരമല്ല.",
-    error: "എന്തോ പിഴവുണ്ടായി. അടിയന്തരമെങ്കിൽ 112 വിളിക്കുക.",
+    error: "അഭ്യർത്ഥന പൂർത്തിയാക്കാനായില്ല. വീണ്ടും ശ്രമിക്കുക. അടിയന്തരമെങ്കിൽ 112 വിളിക്കുക.",
+    network: "ഇപ്പോൾ കാവലാളുമായി ബന്ധപ്പെടാനാകുന്നില്ല. കണക്ഷൻ പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക. അടിയന്തരമെങ്കിൽ 112 വിളിക്കുക.",
+    service: "തുണയുടെ സേവനം താൽക്കാലികമായി ലഭ്യമല്ല. ഇപ്പോഴത്തെ വിവരങ്ങൾ സ്ഥിരീകരിക്കാനാകില്ല. അടിയന്തര അപകടത്തിൽ 112-ലും ജില്ലാ ദുരന്തസഹായത്തിന് 1077-ലും വിളിക്കുക.",
+    timeout: "വിവരങ്ങൾ ലഭിക്കാൻ കൂടുതൽ സമയമെടുക്കുന്നു. വീണ്ടും ശ്രമിക്കുക. അടിയന്തരമെങ്കിൽ 112 വിളിക്കുക.",
+    statusDb: "ചാറ്റ്ബോട്ട് ഡാറ്റാബേസ് ലഭ്യമല്ല.",
+    statusProvider: "AI സേവനത്തിന്റെ ക്രെഡൻഷ്യലുകൾ ക്രമീകരിച്ചിട്ടില്ല. അടിയന്തര നമ്പറുകൾ ലഭ്യമാണ്.",
+    statusKnowledge: "സുരക്ഷാ വിജ്ഞാന സൂചിക ലഭ്യമല്ല. സുരക്ഷാ മറുപടികൾ ലഭിക്കണമെന്നില്ല.",
+    statusReference: "KSDMA റഫറൻസ് വിവരങ്ങൾ പ്രവർത്തനരഹിതമാണ് അല്ലെങ്കിൽ ഇറക്കുമതി ചെയ്തിട്ടില്ല. ക്യാമ്പ്/ആശുപത്രി/കിയോസ്ക് തിരച്ചിൽ ലഭ്യമാകണമെന്നില്ല.",
     limited: "വളരെയധികം സന്ദേശങ്ങൾ. ഒരു മിനിറ്റ് കാത്തിരിക്കുക.",
     viewing: (d) => `${d} ജില്ലയ്ക്കുള്ള സഹായം`,
     locate: "📍 എന്റെ സ്ഥലം ഉപയോഗിക്കുക",
@@ -76,6 +90,7 @@ export default function ChatWidget({ variant = "floating", district = null, page
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [healthWarning, setHealthWarning] = useState("");
   const [quick, setQuick] = useState(null);
   const [coords, setCoords] = useState(null); // only kept in memory, sent with messages, never saved
   const [sessionId, setSessionId] = useState(() => {
@@ -86,6 +101,24 @@ export default function ChatWidget({ variant = "floating", district = null, page
   const t = T[lang];
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let current = true;
+    getChatStatus().then((status) => {
+      if (!current) return;
+      const issues = [];
+      if (status.database !== "available") issues.push(t.statusDb);
+      if (!status.provider_supported || !status.provider_credential_configured) issues.push(t.statusProvider);
+      if (status.knowledge_index !== "ready") issues.push(t.statusKnowledge);
+      const counts = Object.values(status.ksdma_reference_rows || {});
+      if (!status.ksdma_reference_data_enabled || counts.some((count) => count === 0 || count === null)) {
+        issues.push(t.statusReference);
+      }
+      setHealthWarning(issues.join(" "));
+    }).catch(() => { if (current) setHealthWarning(t.network); });
+    return () => { current = false; };
+  }, [open, lang]);
 
   async function send(text) {
     const msg = (text ?? input).trim();
@@ -107,7 +140,11 @@ export default function ChatWidget({ variant = "floating", district = null, page
       }]);
       setQuick(data.quick_replies);
     } catch (e) {
-      setMessages((m) => [...m, { role: "bot", content: e.message === "rate_limited" ? t.limited : t.error }]);
+      const message = e.message === "rate_limited" ? t.limited
+        : e.message === "network_unreachable" ? t.network
+          : e.message === "service_unavailable" ? t.service
+            : e.message === "request_timed_out" ? t.timeout : t.error;
+      setMessages((m) => [...m, { role: "bot", content: message }]);
     } finally {
       setLoading(false);
     }
@@ -166,6 +203,7 @@ export default function ChatWidget({ variant = "floating", district = null, page
 
           <div className="kc-sos">{t.emergency}</div>
           {district && <div className="kc-ctx">{t.viewing(district)}</div>}
+          {healthWarning && <div className="kc-health" role="status">{healthWarning}</div>}
 
           <div className="kc-body">
             <div className="kc-msg kc-bot">{t.welcome}</div>

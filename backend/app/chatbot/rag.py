@@ -4,6 +4,8 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from . import config
 
+MIN_RELEVANCE = 0.30
+
 
 @lru_cache(maxsize=1)
 def get_vectorstore() -> Chroma:
@@ -16,4 +18,6 @@ def get_vectorstore() -> Chroma:
 
 
 def search(query: str, k: int = 4):
-    return get_vectorstore().similarity_search(query, k=k)
+    """Return only reasonably relevant knowledge chunks; raise if the index cannot be read."""
+    matches = get_vectorstore().similarity_search_with_relevance_scores(query, k=k)
+    return [doc for doc, score in matches if score >= MIN_RELEVANCE]

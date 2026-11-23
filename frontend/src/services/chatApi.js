@@ -14,15 +14,32 @@ function authHeaders() {
   } catch { return {}; }
 }
 
-export async function sendMessage({ sessionId, message, language, context }) {
-  const res = await fetch(`${BASE}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
-    body: JSON.stringify({ session_id: sessionId || null, message, language, context: context || null }),
-  });
-  if (res.status === 429) throw new Error("rate_limited");
-  if (!res.ok) throw new Error("request_failed");
+export async function getChatStatus() {
+  const res = await fetch(`${BASE}/api/chat/status`, { headers: authHeaders() });
+  if (!res.ok) throw new Error("status_unavailable");
   return res.json();
+}
+
+export async function sendMessage({ sessionId, message, language, context }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  try {
+    const res = await fetch(`${BASE}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ session_id: sessionId || null, message, language, context: context || null }),
+      signal: controller.signal,
+    });
+    if (res.status === 429) throw new Error("rate_limited");
+    if (!res.ok) throw new Error(res.status >= 500 ? "service_unavailable" : "request_failed");
+    return await res.json();
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("request_timed_out");
+    if (error instanceof TypeError) throw new Error("network_unreachable");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function sendFeedback(messageId, helpful) {
