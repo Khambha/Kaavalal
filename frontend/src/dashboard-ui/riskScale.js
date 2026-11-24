@@ -55,6 +55,13 @@ export function getDistrictLayerConfidenceScore(districtName, layer, riskByDistr
   return live?.preparedness_index?.confidence_score ?? live?.uncertainty?.confidence_score ?? null;
 }
 
+export function getDistrictLayerSourceQuality(districtName, layer, riskByDistrict = {}) {
+  const live = riskByDistrict?.[normalizeDistrictName(districtName)];
+  const hazardKey = layer === "Flood" ? "flood" : layer === "Landslide" ? "landslide" : layer === "Drought" ? "drought" : null;
+  if (!hazardKey) return null;
+  return live?.preparedness_index?.hazards?.[hazardKey]?.historical_susceptibility?.quality ?? null;
+}
+
 export function getDistrictLayerProvenance(layer, riskByDistrict = {}) {
   const hasVerifiedModel = Object.values(riskByDistrict).some((item) =>
     item?.status === "OK" && ["VERIFIED_HISTORICAL", "PROXY_CALIBRATED"].includes(item?.model_provenance || item?.metadata?.model_provenance)

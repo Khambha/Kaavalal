@@ -27,8 +27,11 @@ labelled rule indicator, but are not training labels for a probability model.
 ## Static district context
 
 `app/data/kerala_district_static.json` lists the 14 canonical district keys and
-the representative coordinates already used by the application. KSDMA links
-official flood hazard and GSI landslide susceptibility datasets, but those
-rasters/vector layers have not yet been spatially aggregated here. Therefore
-terrain, coast/backwater, basin, and drainage fields remain null. Do not replace
-them with guessed tiers.
+representative weather-grid coordinates. User-supplied susceptibility tables
+are integrated separately in `app/ml_model/susceptibility/` as a 20% context
+term in the experimental preparedness index. Their flood assignment is
+approximate and unverified, landslide classes are district-level, and the
+drought workbook's date/method are unknown. These inputs remain low-quality
+susceptibility indices, not calibrated event probabilities. Official terrain,
+coast/backwater, basin, and drainage fields remain null until proper spatial
+layers are ingested and verified; do not replace them with guessed tiers.
