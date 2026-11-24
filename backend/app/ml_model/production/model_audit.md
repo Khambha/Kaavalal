@@ -28,7 +28,7 @@ labelled rule indicator, but are not training labels for a probability model.
 
 `app/data/kerala_district_static.json` lists the 14 canonical district keys and
 representative weather-grid coordinates. User-supplied susceptibility tables
-are integrated separately in `app/ml_model/susceptibility/` as a 20% context
+are integrated separately in `app/ml_model/susceptibility/` as a 40% context
 term in the experimental preparedness index. Their flood assignment is
 approximate and unverified, landslide classes are district-level, and the
 drought workbook's date/method are unknown. These inputs remain low-quality

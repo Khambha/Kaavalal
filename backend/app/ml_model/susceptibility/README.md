@@ -1,7 +1,7 @@
 # Historical susceptibility inputs
 
-These user-supplied layers contribute a 20% context term to the experimental
-preparedness index. Live weather scenarios contribute 80%. This composite is an
+These user-supplied layers contribute a 40% context term to the experimental
+preparedness index. Live weather scenarios contribute 60%. This composite is an
 index out of 100, not a calibrated probability or an official warning.
 
 ## Source handling
