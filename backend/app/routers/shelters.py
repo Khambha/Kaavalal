@@ -39,6 +39,9 @@ class ShelterCreate(BaseModel):
     longitude: float = Field(ge=74.0, le=78.0)
     capacity: int = Field(gt=0, le=100000)
     is_active: bool = True
+    source_key: str | None = Field(default=None, max_length=120)
+    source_name: str | None = Field(default=None, max_length=100)
+    source_row: int | None = Field(default=None, ge=1)
 
 
 class ShelterLocationCheck(BaseModel):
@@ -282,6 +285,8 @@ def admin_create(data: ShelterCreate, db: Session = Depends(get_db), admin: Admi
         raise HTTPException(status_code=403, detail="Change your temporary password before using the admin console.")
     district, lac = validate_district_and_lac(data.district, data.lac)
     _validate_shelter_coordinate(district, data.latitude, data.longitude)
+    if data.source_key and db.query(Shelter).filter(Shelter.source_key == data.source_key).first():
+        raise HTTPException(status_code=409, detail="This source location is already in the shelter directory.")
     shelter = Shelter(**data.model_dump(exclude={"district", "lac"}), district=district, lac=lac, created_by_admin_id=admin.id)
     db.add(shelter)
     db.commit()
@@ -298,6 +303,8 @@ def admin_update(shelter_id: int, data: ShelterCreate, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="Shelter not found.")
     district, lac = validate_district_and_lac(data.district, data.lac)
     _validate_shelter_coordinate(district, data.latitude, data.longitude)
+    if data.source_key and db.query(Shelter).filter(Shelter.source_key == data.source_key, Shelter.id != shelter.id).first():
+        raise HTTPException(status_code=409, detail="This source location is already linked to another shelter.")
     if data.capacity < shelter.occupied:
         raise HTTPException(status_code=409, detail=f"Capacity cannot be lower than current occupancy ({shelter.occupied}).")
     for field, value in data.model_dump(exclude={"district", "lac"}).items():
