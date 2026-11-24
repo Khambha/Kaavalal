@@ -3,14 +3,18 @@ import re
 import uuid
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+import requests
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.models.admin_user import AdminUser
 from app.models.help_request import HelpRequest
 from app.models.responder_coverage import ResponderCoverage
@@ -42,6 +46,11 @@ class ShelterLocationCheck(BaseModel):
     lac: str = Field(min_length=2)
     latitude: float = Field(ge=8.0, le=13.0)
     longitude: float = Field(ge=74.0, le=78.0)
+
+
+class ShelterLocationSearch(BaseModel):
+    query: str = Field(min_length=3, max_length=300)
+    district: str = Field(min_length=2, max_length=100)
 
 
 class ShelterRequestCreate(BaseModel):
@@ -142,6 +151,70 @@ def _validate_shelter_coordinate(district, latitude, longitude):
             status_code=422,
             detail=f"These coordinates are outside {district}. Check the latitude/longitude order and the Google Maps pin before saving.",
         )
+
+
+@admin_router.post("/geocode")
+@limiter.limit("12/minute")
+def admin_geocode_shelter_location(
+    request: Request,
+    data: ShelterLocationSearch,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Search a place name and return Kerala map points; the key stays server-side."""
+    if admin.must_change_password:
+        raise HTTPException(status_code=403, detail="Change your temporary password before using the admin console.")
+    if not settings.GOOGLE_MAPS_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="Google Maps location search is not configured. Add GOOGLE_MAPS_API_KEY to the backend environment.",
+        )
+
+    address = f"{data.query.strip()}, {data.district.strip()}, Kerala, India"
+    try:
+        response = requests.get(
+            "https://maps.googleapis.com/maps/api/geocode/json",
+            params={
+                "address": address,
+                "components": "country:IN",
+                "region": "in",
+                "key": settings.GOOGLE_MAPS_API_KEY,
+            },
+            timeout=8,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError):
+        raise HTTPException(status_code=502, detail="Google Maps location search is temporarily unavailable.") from None
+
+    if payload.get("status") == "OVER_QUERY_LIMIT":
+        raise HTTPException(status_code=429, detail="Google Maps location search has reached its current quota.")
+    if payload.get("status") not in {"OK", "ZERO_RESULTS"}:
+        raise HTTPException(status_code=502, detail="Google Maps could not complete this location search.")
+
+    results = []
+    for item in payload.get("results", []):
+        point = (item.get("geometry") or {}).get("location") or {}
+        latitude, longitude = point.get("lat"), point.get("lng")
+        if latitude is None or longitude is None or not (8 <= latitude <= 13 and 74 <= longitude <= 78):
+            continue
+        if not _coordinate_in_district(latitude, longitude, data.district):
+            continue
+        place_id = item.get("place_id")
+        maps_params = {"api": "1", "query": f"{latitude},{longitude}"}
+        if place_id:
+            maps_params["query_place_id"] = place_id
+        results.append({
+            "formatted_address": item.get("formatted_address") or data.query.strip(),
+            "latitude": latitude,
+            "longitude": longitude,
+            "place_id": place_id,
+            "map_url": "https://www.google.com/maps/search/?" + urlencode(maps_params),
+        })
+        if len(results) == 5:
+            break
+    if not results:
+        raise HTTPException(status_code=404, detail="No matching location was found in Kerala. Try a nearby landmark or local-body name.")
+    return {"results": results}
 
 
 def shelter_public(shelter, can_assign=None):
@@ -269,6 +342,61 @@ def public_shelters(db: Session = Depends(get_db)):
     # Do not publish stale or malformed coordinates on the citizen map. Admins
     # can still see and correct these rows in the console.
     return [shelter_public(s) for s in shelters if _coordinate_in_district(s.latitude, s.longitude, s.district)]
+
+
+@router.get("/reference-camps")
+@limiter.limit("60/minute")
+def public_reference_camps(
+    request: Request,
+    district: str | None = Query(default=None, max_length=100),
+    search: str | None = Query(default=None, max_length=160),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=30, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Expose the static KSDMA directory without treating its camps as live shelters."""
+    from app.chatbot.ref_models import RefCamp
+
+    query = db.query(RefCamp)
+    if district and district.strip():
+        query = query.filter(func.lower(RefCamp.district) == _district_key(district))
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
+        query = query.filter(or_(
+            RefCamp.name.ilike(pattern),
+            RefCamp.lsg.ilike(pattern),
+            RefCamp.village.ilike(pattern),
+        ))
+
+    total = query.count()
+    camps = (query.order_by(RefCamp.district, RefCamp.name)
+             .offset((page - 1) * page_size).limit(page_size).all())
+    items = []
+    for camp in camps:
+        location_query = ", ".join(part for part in (camp.name, camp.village, camp.lsg, camp.district, "Kerala", "India") if part)
+        map_query = f"{camp.lat},{camp.lng}" if camp.lat is not None and camp.lng is not None else location_query
+        items.append({
+            "id": camp.id,
+            "name": camp.name,
+            "district": camp.district,
+            "local_body": camp.lsg,
+            "village": camp.village,
+            "latitude": camp.lat,
+            "longitude": camp.lng,
+            "listed_capacity": camp.capacity,
+            "toilets": camp.toilets,
+            "disabled_friendly": camp.disabled_friendly,
+            "map_url": "https://www.google.com/maps/search/?" + urlencode({"api": "1", "query": map_query}),
+            "status": "KSDMA listed; current operating status unverified",
+        })
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "source": "KSDMA monsoon relief-camp inventory",
+        "notice": "This static list does not confirm that a camp is open or has space today. Confirm with the district control room at 1077 before travelling.",
+    }
 
 
 @router.post("/requests", status_code=201)

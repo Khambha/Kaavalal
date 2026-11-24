@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     MYSQL_SSL_CA: str | None = None
     FRONTEND_BASE_URL: str = "http://127.0.0.1:5173"
     OPENWEATHER_API_KEY: str = Field(min_length=1)
+    # Optional: used only by the admin address-to-coordinate search endpoint.
+    GOOGLE_MAPS_API_KEY: str | None = None
 
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587
@@ -40,7 +42,6 @@ class Settings(BaseSettings):
     CHATBOT_VECTOR_DIR: str = "chatbot_vectorstore"
     CHATBOT_KB_DIR: str = "app/chatbot/knowledge"
     CHATBOT_RATE_LIMIT: str = "20/minute"
-    CHATBOT_KSDMA_DATA_READY: bool = False
 
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),

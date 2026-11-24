@@ -30,7 +30,6 @@ EMBEDDING_MODEL = app_settings.CHATBOT_EMBEDDING_MODEL
 VECTOR_DIR = _backend_path(app_settings.CHATBOT_VECTOR_DIR)
 KB_DIR = _backend_path(app_settings.CHATBOT_KB_DIR)
 RATE_LIMIT = app_settings.CHATBOT_RATE_LIMIT
-KSDMA_DATA_READY = app_settings.CHATBOT_KSDMA_DATA_READY
 
 # Chatbot identity (change here to rename it everywhere in the backend)
 BOT_NAME = "Thunai"

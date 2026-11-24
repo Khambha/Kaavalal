@@ -54,6 +54,7 @@ def chatbot_status(db: Session = Depends(get_db)):
                 reference_models[label] = None
     except Exception:
         reference_models = {"camps": None, "hospitals": None, "taluk_contacts": None, "water_kiosks": None}
+    reference_data_enabled = any(count is not None and count > 0 for count in reference_models.values())
     vector_db = Path(config.VECTOR_DIR) / "chroma.sqlite3"
     knowledge_index = "missing"
     if vector_db.is_file():
@@ -87,7 +88,7 @@ def chatbot_status(db: Session = Depends(get_db)):
         "provider_supported": provider_supported,
         "provider_credential_configured": provider_configured,
         "knowledge_index": knowledge_index,
-        "ksdma_reference_data_enabled": config.KSDMA_DATA_READY,
+        "ksdma_reference_data_enabled": reference_data_enabled,
         "ksdma_reference_rows": reference_models,
         "provider_credential_note": "Presence only; the provider key/model has not been verified by a live request.",
     }

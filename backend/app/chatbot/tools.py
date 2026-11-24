@@ -11,11 +11,11 @@ Module map:  alerts -> 16 | shelters -> 13,14,15 | incidents -> 6,7,8 (own repor
 """
 from sqlalchemy import text
 from langchain_core.tools import tool
-from . import config
 from .config import EMERGENCY_CONTACTS, normalize_district
 from .rag import search as rag_search
 import difflib
 import re
+from urllib.parse import quote_plus
 from .request_context import current_user_id, current_location
 from .geo import haversine_km, map_link
 
@@ -263,6 +263,15 @@ def _db_query(fn):
         db.close()
 
 
+def _reference_table_ready(db, model):
+    """Check the actual shared database so deployment env flags cannot hide imported rows."""
+    try:
+        return db.query(model.id).first() is not None
+    except Exception:
+        db.rollback()
+        return False
+
+
 def _place_tokens(place: str):
     """Words of `place` that are not district names (used to match panchayat / village / camp names)."""
     words = re.findall(r"[A-Za-z]{3,}|[\u0D00-\u0D7F]+", place or "")
@@ -278,12 +287,15 @@ def _place_tokens(place: str):
 
 def _camp_row(c, user_loc=None):
     d = {"name": c.name, "district": c.district, "local_body": c.lsg, "village": c.village,
-         "capacity": c.capacity if c.capacity is not None else "not recorded",
+         "listed_capacity": c.capacity if c.capacity is not None else "not recorded",
          "toilets": c.toilets or "unknown", "disabled_friendly": c.disabled_friendly or "unknown"}
     if c.lat is not None and c.lng is not None:
         d["map"] = map_link(c.lat, c.lng)
         if user_loc:
             d["distance_km"] = round(haversine_km(user_loc[0], user_loc[1], c.lat, c.lng), 1)
+    else:
+        place = ", ".join(part for part in (c.name, c.village, c.lsg, c.district, "Kerala", "India") if part)
+        d["map"] = f"https://www.google.com/maps/search/?api=1&query={quote_plus(place)}"
     return d
 
 
@@ -292,12 +304,12 @@ def find_relief_camps(place: str = "", near_me: bool = False) -> str:
     """Find relief camps / shelters from KSDMA's monsoon camp list. `place` can be a Kerala district, panchayat,
     municipality, village or camp name (English or Malayalam). Set near_me=true to list the camps nearest to the
     user's shared location (only works if the user shared their location)."""
-    if not config.KSDMA_DATA_READY:
-        return "KSDMA camp records have not been imported into this Kaavalal database yet. Do not infer that no camps exist; call the district emergency control room at 1077."
     from .ref_models import RefCamp
     loc = current_location.get()
 
     def run(db):
+        if not _reference_table_ready(db, RefCamp):
+            return "KSDMA camp records are not available in this database. Do not infer that no camps exist; call the district emergency control room at 1077."
         if near_me:
             if not loc:
                 return "The user has not shared their location. Ask them to press 'Use my location', or tell you a district or panchayat."
@@ -344,12 +356,12 @@ def find_relief_camps(place: str = "", near_me: bool = False) -> str:
 def find_water_kiosks(place: str = "", near_me: bool = False) -> str:
     """Find emergency drinking-water kiosk locations. `place` can be a Kerala district or taluk name. Set near_me=true
     for the kiosks nearest to the user's shared location. Kiosks have map coordinates only (no names)."""
-    if not config.KSDMA_DATA_READY:
-        return "KSDMA water-kiosk records have not been imported into this Kaavalal database yet. Do not infer that no kiosks exist."
     from .ref_models import RefWaterKiosk
     loc = current_location.get()
 
     def run(db):
+        if not _reference_table_ready(db, RefWaterKiosk):
+            return "KSDMA water-kiosk records are not available in this database. Do not infer that no kiosks exist."
         if near_me:
             if not loc:
                 return "The user has not shared their location. Ask them to press 'Use my location', or give a district or taluk."
@@ -387,14 +399,14 @@ def find_water_kiosks(place: str = "", near_me: bool = False) -> str:
 def find_hospitals(district: str, kind: str = "") -> str:
     """List hospitals in a Kerala district from the KSDMA health survey (government and private), with bed, ICU and
     ventilator counts. kind can be 'government' or 'private' (optional)."""
-    if not config.KSDMA_DATA_READY:
-        return "KSDMA hospital records have not been imported into this Kaavalal database yet. Call 108 or 112 in an emergency."
     from .ref_models import RefHospital
     canonical = normalize_district(district)
     if not canonical:
         return NOT_KERALA
 
     def run(db):
+        if not _reference_table_ready(db, RefHospital):
+            return "KSDMA hospital records are not available in this database. Call 108 or 112 in an emergency."
         q = db.query(RefHospital).filter(RefHospital.district == canonical)
         if kind.lower() in ("government", "private"):
             q = q.filter(RefHospital.kind == kind.lower())
@@ -416,14 +428,14 @@ def find_hospitals(district: str, kind: str = "") -> str:
 def get_taluk_emergency_contacts(district: str, taluk: str = "") -> str:
     """Get the 24x7 Taluk Emergency Operations Centre (TEOC) phone numbers for a Kerala district, or for one taluk.
     Use this when the user needs the local office to confirm a camp, report a problem or ask for help."""
-    if not config.KSDMA_DATA_READY:
-        return "KSDMA taluk contact records have not been imported into this Kaavalal database yet. Use the district control room number 1077."
     from .ref_models import RefTalukEOC
     canonical = normalize_district(district)
     if not canonical:
         return NOT_KERALA
 
     def run(db):
+        if not _reference_table_ready(db, RefTalukEOC):
+            return "KSDMA taluk contact records are not available in this database. Use the district control room number 1077."
         rows = db.query(RefTalukEOC).filter(RefTalukEOC.district == canonical).all()
         if not rows:
             return f"No taluk contacts are available for {canonical}. Give the district control room number 1077."

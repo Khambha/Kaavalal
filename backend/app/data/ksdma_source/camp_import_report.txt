@@ -1,0 +1,5 @@
+CAMPS: 6377 source rows -> 6246 imported. Dropped: 129 duplicates, 2 without a name, 0 without a district. Coordinates: 3 lat/lng swapped and fixed, 373 missing/invalid (kept, but no map/distance). Capacity: 7 unreadable values (e.g. '1.50, 2.50', '2hall') stored as 'not recorded'.
+WATER KIOSKS: file not found - skipped
+HOSPITALS: files not found - skipped
+TALUK DIRECTORY: pdf not found - skipped
+Database updated.

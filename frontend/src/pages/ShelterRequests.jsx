@@ -56,6 +56,12 @@ function ShelterCheckinQr({ acceptanceId, name, peopleCount, shelterName }) {
 
 export default function ShelterRequests({ shelters = [], language = "en" }) {
   const [requests, setRequests] = useState([]);
+  const [referenceCamps, setReferenceCamps] = useState({ items: [], total: 0, page_size: 30 });
+  const [referenceSearch, setReferenceSearch] = useState("");
+  const [referenceQuery, setReferenceQuery] = useState("");
+  const [referencePage, setReferencePage] = useState(1);
+  const [referenceLoading, setReferenceLoading] = useState(false);
+  const [referenceError, setReferenceError] = useState("");
   const [form, setForm] = useState(blankForm);
   const [idPhoto, setIdPhoto] = useState(null);
   const [districtFilter, setDistrictFilter] = useState("");
@@ -77,6 +83,23 @@ export default function ShelterRequests({ shelters = [], language = "en" }) {
     window.addEventListener("focus", load);
     return () => { window.clearInterval(interval); window.removeEventListener("focus", load); };
   }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ page: String(referencePage), page_size: "30" });
+    if (districtFilter) params.set("district", districtFilter);
+    if (referenceQuery) params.set("search", referenceQuery);
+    setReferenceLoading(true);
+    setReferenceError("");
+    fetch(`${API}/reference-camps?${params}`, { signal: controller.signal })
+      .then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || "KSDMA camp locations are unavailable.");
+        setReferenceCamps(data);
+      })
+      .catch(error => { if (error.name !== "AbortError") setReferenceError(error.message); })
+      .finally(() => { if (!controller.signal.aborted) setReferenceLoading(false); });
+    return () => controller.abort();
+  }, [districtFilter, referencePage, referenceQuery]);
   async function toggleHistory(id) {
     if (histories[id]) { setHistories(v => ({ ...v, [id]: null })); return; }
     try { const r = await fetch(`${API}/requests/my/${id}/history`, { headers: { Authorization: `Bearer ${token()}` } }); const data = await r.json(); if (!r.ok) throw new Error(data.detail || "Could not load status history."); setHistories(v => ({ ...v, [id]: data })); }
@@ -132,6 +155,20 @@ export default function ShelterRequests({ shelters = [], language = "en" }) {
   return <main className="shelter-request-page"><header><div><span className="shelter-eyebrow">KAAVALAL · {language === "ml" ? "പൗര സേവനങ്ങൾ" : "CITIZEN SERVICES"}</span><h1>{t("Request emergency shelter", language)}</h1><p>Browse active shelters by district, then send your household details to the local rescue team.</p></div></header>
     <section className="citizen-shelter-directory"><div className="shelter-directory-heading"><div><h2>Available shelter options</h2><p>Live occupancy is shared with administrators and response teams.</p></div><label>District<select value={districtFilter} onChange={e => { setDistrictFilter(e.target.value); setForm(v => ({ ...v, shelter_id: "" })); }}><option value="">All districts</option>{districts.map(d => <option key={d}>{d}</option>)}</select></label></div>
       {!visibleShelters.length ? <p className="shelter-empty">No active shelters are listed yet.</p> : <div className="citizen-shelter-grid">{visibleShelters.map(s => <article className={`citizen-shelter-option ${!s.is_active || s.available <= 0 ? "unavailable" : ""}`} key={s.id}><div><span>{s.district} · {s.lac}</span><h3>{s.name}</h3><small>{s.building_type} · {s.address}</small></div><strong>{s.occupied}/{s.capacity}<small> people</small></strong><p>{s.is_active ? `${s.available} spaces available` : "Currently inactive"}</p>{s.latitude && s.longitude && <a href={`https://www.google.com/maps?q=${s.latitude},${s.longitude}`} target="_blank" rel="noreferrer">View location ↗</a>}<button type="button" disabled={!s.is_active || s.available <= 0} onClick={() => setForm(v => ({ ...v, shelter_id: String(s.id) }))}>{Number(form.shelter_id) === s.id ? "Selected" : s.is_active && s.available > 0 ? "Request this shelter" : "Unavailable"}</button></article>)}</div>}
+    </section>
+    <section className="citizen-shelter-directory ksdma-camp-directory">
+      <div className="shelter-directory-heading"><div><h2>KSDMA listed relief camps</h2><p>Reference locations from the KSDMA monsoon camp inventory. They are not confirmed open today and cannot accept requests through this list.</p></div><span className="camp-directory-count">{referenceCamps.total.toLocaleString()} listed</span></div>
+      <p className="camp-directory-notice">Confirm that a camp is open and has space with the district control room at <b>1077</b> before travelling. The capacity shown, when available, is the source-listed figure, not live occupancy.</p>
+      <form className="camp-directory-search" onSubmit={event => { event.preventDefault(); setReferencePage(1); setReferenceQuery(referenceSearch.trim()); }}>
+        <input value={referenceSearch} onChange={event => setReferenceSearch(event.target.value)} maxLength={160} placeholder="Search by camp, village, or local body" aria-label="Search KSDMA camp list"/>
+        <button type="submit">Search listed camps</button>
+      </form>
+      {referenceError ? <p className="shelter-empty" role="alert">{referenceError}</p> : referenceLoading ? <p className="shelter-empty" role="status">Loading KSDMA reference locations…</p> : !referenceCamps.items.length ? <p className="shelter-empty">No matching camp entries were returned. Try a district or local-body name.</p> : <div className="camp-directory-grid">{referenceCamps.items.map(camp => <article className="camp-directory-card" key={camp.id}>
+        <div><span>{camp.district}{camp.local_body ? ` · ${camp.local_body}` : ""}</span><h3>{camp.name}</h3><small>{[camp.village, camp.local_body, camp.district].filter(Boolean).join(", ")}</small></div>
+        <p>{camp.listed_capacity == null ? "Capacity not recorded in source" : `Source-listed capacity: ${camp.listed_capacity} · not live`}</p>
+        <a href={camp.map_url} target="_blank" rel="noreferrer">Search this camp in Google Maps ↗</a>
+      </article>)}</div>}
+      {!referenceError && referenceCamps.total > referenceCamps.page_size && <div className="camp-directory-pagination"><span>Page {referenceCamps.page} of {Math.ceil(referenceCamps.total / referenceCamps.page_size)}</span><div><button type="button" disabled={referencePage <= 1 || referenceLoading} onClick={() => setReferencePage(page => Math.max(1, page - 1))}>Previous</button><button type="button" disabled={referencePage >= Math.ceil(referenceCamps.total / referenceCamps.page_size) || referenceLoading} onClick={() => setReferencePage(page => page + 1)}>Next</button></div></div>}
     </section>
     <div className="shelter-request-grid"><form onSubmit={submit} className="shelter-request-form"><h2>Request shelter support</h2>
       <label>{t("Preferred shelter", language)}<select required value={form.shelter_id} onChange={e => setForm(v => ({ ...v, shelter_id: e.target.value }))}><option value="">Choose an available shelter</option>{available.map(s => <option key={s.id} value={s.id}>{s.name} · {s.lac}, {s.district} · {s.occupied}/{s.capacity} · {s.available} spaces left</option>)}</select></label>
