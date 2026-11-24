@@ -23,9 +23,9 @@ const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 const hazardLayers = [
   { name: "Overall Risk", description: "Highest available experimental preparedness index; not a disaster probability." },
-  { name: "Flood", description: "Live weather scenarios with a 20% relative floodplain susceptibility context where available." },
-  { name: "Landslide", description: "Live rainfall scenarios with a 20% district-level susceptibility context where mapped." },
-  { name: "Drought", description: "Live rainfall and evapotranspiration scenarios with a 20% village-class susceptibility context." },
+  { name: "Flood", description: "Live weather scenarios with a 40% relative floodplain susceptibility context where available." },
+  { name: "Landslide", description: "Live rainfall scenarios with a 40% district-level susceptibility context where mapped." },
+  { name: "Drought", description: "Live rainfall and evapotranspiration scenarios with a 40% village-class susceptibility context." },
 ];
 
 const initialDistricts = [
@@ -751,7 +751,7 @@ function App() {
             />
           </label>
 
-          <p className="sidebar-caption" role={riskMapLoading ? "status" : undefined}>{riskMapLoading ? "Loading live weather scenarios…" : "Preparedness index: 80% live weather scenario + 20% historical susceptibility where available. Not a disaster chance or official warning."}</p>
+          <p className="sidebar-caption" role={riskMapLoading ? "status" : undefined}>{riskMapLoading ? "Loading live weather scenarios…" : "Preparedness index: 60% live weather scenario + 40% historical susceptibility where available. Not a disaster chance or official warning."}</p>
 
           <div className="district-list">
             {filteredDistricts.map((district) => {
@@ -996,7 +996,7 @@ function App() {
                   {isExperimentalRisk && (
                     <>
                       <p className="sidebar-caption" role="note">
-                        Experimental preparedness index out of 100, not a chance of disaster. It blends the live weather scenario (80%) with a static historical susceptibility index (20%) when that source has a district value. Source quality varies and none of these values is a verified forecast probability.
+                        Experimental preparedness index out of 100, not a chance of disaster. It blends the live weather scenario (60%) with a static historical susceptibility index (40%) when that source has a district value. Source quality varies and none of these values is a verified forecast probability.
                       </p>
                       <details className="scenario-breakdown">
                         <summary>View scenario breakdown</summary>
@@ -1006,8 +1006,8 @@ function App() {
                             <strong>{hazard[0].toUpperCase() + hazard.slice(1)}</strong>
                             {hazard === "drought" && <span>Uses forecast and recent rainfall versus ET₀, plus recent soil moisture and dry-spell length.</span>}
                             <span>Combined preparedness index: {result.score == null ? "Unavailable" : `${result.score}/100`}</span>
-                            <span>Live weather scenario (80%): {result.weather_scenario_score == null ? "Unavailable" : `${result.weather_scenario_score}/100`}</span>
-                            <span>Historical susceptibility (20%): {result.historical_susceptibility?.score == null ? "Unavailable; weather-only score shown" : `${result.historical_susceptibility.score}/100 · ${result.historical_susceptibility.quality} source quality`}</span>
+                            <span>Live weather scenario (60%): {result.weather_scenario_score == null ? "Unavailable" : `${result.weather_scenario_score}/100`}</span>
+                            <span>Historical susceptibility (40%): {result.historical_susceptibility?.score == null ? "Unavailable; weather-only score shown" : `${result.historical_susceptibility.score}/100 · ${result.historical_susceptibility.quality} source quality`}</span>
                             {result.historical_susceptibility?.basis && <small>{result.historical_susceptibility.basis}</small>}
                             <span>Forecast weather component: {result.weather_component == null ? "Unavailable" : `${result.weather_component}/100`}</span>
                             <span>Recent weather context: {result.antecedent_weather_component == null ? "Unavailable" : `${result.antecedent_weather_component}/100`}</span>
@@ -1030,7 +1030,11 @@ function App() {
                             )}
                             <div className="scenario-values">
                               {(result.scenarios || []).map((scenario) => (
-                                <span key={scenario.name}>{scenario.name} ({Math.round((scenario.precipitation_factor || 1) * 100)}%): {scenario.index == null ? "—" : `${scenario.index}/100`} (weather {scenario.weather_index ?? "—"} + historical 20%)</span>
+                                <span key={scenario.name}>
+                                  {scenario.name} ({Math.round((scenario.precipitation_factor || 1) * 100)}%): {scenario.index == null ? "—" : `${scenario.index}/100`} ({scenario.historical_susceptibility_index == null
+                                    ? "weather-only; historical data unavailable"
+                                    : `weather ${scenario.weather_index ?? "—"} × 60% + history ${scenario.historical_susceptibility_index} × 40%`})
+                                </span>
                               ))}
                             </div>
                             {Object.entries(result.historical_reference || {}).map(([field, quantiles]) => quantiles && (

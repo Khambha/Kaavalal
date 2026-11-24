@@ -2,7 +2,7 @@
 
 Historical training CSVs are read only for weather feature distributions. Their
 event labels and risk targets are deliberately ignored. Static susceptibility
-layers contribute 20% to an 80/20 experimental preparedness index; they are not
+layers contribute 40% to a 60/40 experimental preparedness index; they are not
 event labels and must not be described as probabilities.
 """
 
@@ -18,8 +18,8 @@ from app.services.historical_susceptibility import get_historical_susceptibility
 
 WEATHER_WEIGHT = 0.65
 ANTECEDENT_WEIGHT = 0.35
-LIVE_WEATHER_INDEX_WEIGHT = 0.80
-HISTORICAL_SUSCEPTIBILITY_WEIGHT = 0.20
+LIVE_WEATHER_INDEX_WEIGHT = 0.60
+HISTORICAL_SUSCEPTIBILITY_WEIGHT = 0.40
 TIMEZONE = ZoneInfo("Asia/Kolkata")
 MODEL_DIR = Path(__file__).resolve().parents[1] / "ml_model"
 
@@ -235,7 +235,7 @@ def _blend(weather_score: float | None, antecedent_score: float | None) -> float
 
 
 def _apply_susceptibility_blend(hazard: str, result: dict[str, Any], district: str) -> dict[str, Any]:
-    """Apply the requested 80/20 blend while preserving weather-only components."""
+    """Apply the requested 60/40 blend while preserving weather-only components."""
     weather_score = result.get("score")
     historical = get_historical_susceptibility(hazard, district)
     historical_score = historical.get("score")
@@ -273,7 +273,7 @@ def _apply_susceptibility_blend(hazard: str, result: dict[str, Any], district: s
         result.setdefault("component_breakdown", []).append({
             "label": "Historical susceptibility context",
             "score": historical_score,
-            "weight": "20% of combined preparedness index",
+            "weight": "40% of combined preparedness index",
             "quality": historical.get("quality"),
         })
     if historical.get("quality") == "LOW":
@@ -297,6 +297,7 @@ def _make_rain_scenarios(
     distributions: dict[str, list[float]],
     hazard: str,
     terrain_missing: bool = False,
+    forecast_window_hours: int = 72,
 ) -> dict[str, Any]:
     anchor_values = distributions.get("rainfall_24h_mm") or distributions.get("rainfall_72h_mm")
     factors = _scenario_factors(anchor_values)
@@ -306,16 +307,16 @@ def _make_rain_scenarios(
                                   distributions.get("rainfall_24h_mm"))
         score72 = _risk_component(forecast72 * factor if forecast72 is not None else None,
                                   distributions.get("rainfall_72h_mm"), 3)
-        weather = _mean([score24, score72])
+        weather = score24 if forecast_window_hours <= 24 else _mean([score24, score72])
         rows.append({"name": name, "precipitation_factor": round(factor, 2), "index": _blend(weather, antecedent)})
     values = [row["index"] for row in rows]
     score = round(0.25 * values[0] + 0.5 * values[1] + 0.25 * values[2], 1) if all(v is not None for v in values) else None
-    baseline_weather = _mean([
-        _risk_component(forecast24, distributions.get("rainfall_24h_mm")),
-        _risk_component(forecast72, distributions.get("rainfall_72h_mm"), 3),
-    ])
+    baseline_24h = _risk_component(forecast24, distributions.get("rainfall_24h_mm"))
+    baseline_72h = _risk_component(forecast72, distributions.get("rainfall_72h_mm"), 3)
+    baseline_weather = baseline_24h if forecast_window_hours <= 24 else _mean([baseline_24h, baseline_72h])
     return {
         "score": score,
+        "forecast_window_hours": forecast_window_hours,
         "weather_component": round(baseline_weather, 1) if baseline_weather is not None else None,
         "antecedent_weather_component": round(antecedent, 1) if antecedent is not None else None,
         "scenarios": rows,
@@ -346,17 +347,20 @@ def build_scenario_indices(features: Any) -> dict[str, Any]:
             distributions,
             hazard,
             terrain_missing=hazard == "landslide" and features.terrain_ruggedness is None,
+            forecast_window_hours=24 if hazard == "flood" else 72,
         )
         result["level"] = "EXPERIMENTAL_INDEX" if result["score"] is not None else "NOT_AVAILABLE"
         result["historical_anchor"] = anchor["metadata"]
-        result["confidence_score"] = _input_coverage_score([
+        required_inputs = [
             features.forecast_rain_24h_mm,
-            features.forecast_rain_72h_mm,
             features.rain_7d_mm,
             features.api_14d,
             anchor["metadata"]["sample_count"] if anchor["metadata"]["sample_count"] >= 5 else None,
             features.terrain_ruggedness if hazard == "landslide" else True,
-        ])
+        ]
+        if hazard != "flood":
+            required_inputs.insert(1, features.forecast_rain_72h_mm)
+        result["confidence_score"] = _input_coverage_score(required_inputs)
         result["confidence_score_basis"] = "Percentage of required weather/context inputs available; not prediction accuracy."
         if anchor["metadata"]["sample_count"] < 5:
             result["confidence"] = "LOW"
@@ -493,8 +497,8 @@ def build_scenario_indices(features: Any) -> dict[str, Any]:
             "weather_forecast_weight_within_live_scenario": WEATHER_WEIGHT,
             "recent_weather_context_weight_within_live_scenario": ANTECEDENT_WEIGHT,
         },
-        "scenario_method": "Precipitation sensitivity cases use district/season historical weather spread where available. Each weather scenario is blended 80/20 with the static historical susceptibility index when that source has a district value. Scenarios are simulated, not observed hazard events.",
-        "historical_data_note": "Static susceptibility layers contribute 20% to the preparedness index where available. Their source, spatial resolution, and quality are reported per hazard; source scores are not disaster probabilities. Training event labels and risk targets are not used.",
+        "scenario_method": "Precipitation sensitivity cases use district/season historical weather spread where available. Each weather scenario is blended 60/40 with the static historical susceptibility index when that source has a district value. Scenarios are simulated, not observed hazard events.",
+        "historical_data_note": "Static susceptibility layers contribute 40% to the preparedness index where available. Their source, spatial resolution, and quality are reported per hazard; source scores are not disaster probabilities. Training event labels and risk targets are not used.",
         "limitations": [
             "Index values are not percentages or probabilities of a disaster.",
             "Historical weather anchors include modeled, proxy, or synthetically filled values and are not observed hazard outcomes.",

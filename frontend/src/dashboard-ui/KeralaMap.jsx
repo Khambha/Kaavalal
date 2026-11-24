@@ -327,12 +327,16 @@ export default function KeralaMap({
               const score = getDistrictLayerScore(distName, selectedLayer, riskByDistrict);
               const confidence = getDistrictLayerConfidenceScore(distName, selectedLayer, riskByDistrict);
               const sourceQuality = getDistrictLayerSourceQuality(distName, selectedLayer, riskByDistrict);
+              const floodWindowHours = riskByDistrict?.[normalizeDistrictName(distName)]?.hazards?.flood?.forecast_window_hours;
               const band = getRiskBand(score, selectedLayer);
+              const scoreLabel = selectedLayer === "Flood" && floodWindowHours === 24
+                ? "Flood · next 24 hours"
+                : `${selectedLayer} index`;
 
               layer.bindTooltip(
                 `<div class="leaflet-custom-tooltip">
                   <strong>${cleanDistrictName(distName)}</strong>
-                  <span>${score == null ? "No live scenario data available" : `${selectedLayer} index ${score}/100 · ${band?.label || ""}`}</span>
+                  <span>${score == null ? "No live scenario data available" : `${scoreLabel} ${score}/100 · ${band?.label || ""}`}</span>
                   ${score == null ? "" : `<span title="Input completeness, not prediction accuracy">Input coverage ${confidence == null ? "—" : `${confidence}/100`}</span>`}
                   ${score == null || !sourceQuality ? "" : `<span title="Quality of the static susceptibility source; not prediction accuracy">Historical source quality: ${sourceQuality}</span>`}
                  </div>`,
@@ -480,8 +484,8 @@ export default function KeralaMap({
       <div className="map-legend">
         <div className="legend-head">
           <span className="legend-title">{selectedLayer}</span>
-          <span className="legend-tag" title="Preparedness index out of 100: 80% live weather scenario and 20% historical susceptibility where available. Not a disaster probability or official warning.">
-            {riskMapLoading ? "Loading weather scenarios" : getDistrictLayerProvenance(selectedLayer, riskByDistrict) === "MODEL_OUTPUT" ? "Validated model data" : getDistrictLayerProvenance(selectedLayer, riskByDistrict) === "EXPERIMENTAL_INDEX" ? "80% weather · 20% history · not probability" : "Live data unavailable"}
+          <span className="legend-tag" title="Preparedness index out of 100: 60% live weather scenario and 40% historical susceptibility where available. Not a disaster probability or official warning.">
+            {riskMapLoading ? "Loading weather scenarios" : getDistrictLayerProvenance(selectedLayer, riskByDistrict) === "MODEL_OUTPUT" ? "Validated model data" : getDistrictLayerProvenance(selectedLayer, riskByDistrict) === "EXPERIMENTAL_INDEX" ? "60% weather · 40% history · not probability" : "Live data unavailable"}
           </span>
         </div>
         <ul className="legend-list">
