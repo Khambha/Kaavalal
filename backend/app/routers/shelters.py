@@ -1,4 +1,6 @@
 import json
+import hashlib
+import math
 import re
 import uuid
 from functools import lru_cache
@@ -80,6 +82,7 @@ class AssignShelter(BaseModel):
 
 
 DISTRICT_BOUNDARIES = Path(__file__).resolve().parents[3] / "frontend" / "public" / "Data" / "Kerala_districts.geojson"
+LAC_LOCATIONS = Path(__file__).resolve().parents[3] / "frontend" / "src" / "dashboard-ui" / "lac_locations.json"
 SHELTER_REQUEST_UPLOAD_DIR = Path(__file__).resolve().parents[1] / "uploads" / "shelter_requests"
 SHELTER_REQUEST_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 MAX_ID_PHOTO_BYTES = 5 * 1024 * 1024
@@ -154,6 +157,39 @@ def _validate_shelter_coordinate(district, latitude, longitude):
             status_code=422,
             detail=f"These coordinates are outside {district}. Check the latitude/longitude order and the Google Maps pin before saving.",
         )
+
+
+@lru_cache(maxsize=1)
+def _load_lac_points():
+    try:
+        with LAC_LOCATIONS.open("r", encoding="utf-8") as stream:
+            rows = json.load(stream).get("constituencies", [])
+        return [row for row in rows if row.get("district") and row.get("lac_name")
+                and row.get("latitude") is not None and row.get("longitude") is not None]
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=503, detail="LAC coordinate data is unavailable; reference camps cannot be imported safely.") from exc
+
+
+def _nearest_lac(district, latitude, longitude):
+    candidates = [row for row in _load_lac_points() if _district_key(row.get("district")) == _district_key(district)]
+    if not candidates:
+        return None
+    def distance(row):
+        lat1, lat2 = map(math.radians, (latitude, float(row["latitude"])))
+        dlat = lat2 - lat1
+        dlng = math.radians(float(row["longitude"]) - longitude)
+        value = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
+        return 6371 * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
+    nearest = min(candidates, key=distance)
+    return nearest["lac_name"], distance(nearest)
+
+
+def _reference_camp_source_key(camp):
+    parts = (camp.district, camp.name, camp.lsg, camp.village,
+             round(float(camp.lat), 5) if camp.lat is not None else "",
+             round(float(camp.lng), 5) if camp.lng is not None else "")
+    canonical = "|".join(re.sub(r"\s+", " ", str(part or "").strip().casefold()) for part in parts)
+    return f"ksdma-camp:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:32]}"
 
 
 @admin_router.post("/geocode")
@@ -270,6 +306,74 @@ def admin_list(db: Session = Depends(get_db), admin: AdminUser = Depends(get_cur
     return [shelter_public(s) for s in db.query(Shelter).order_by(Shelter.district, Shelter.name).all()]
 
 
+@admin_router.post("/import-reference-camps")
+def import_reference_camps(db: Session = Depends(get_db), admin: AdminUser = Depends(get_current_admin)):
+    """Copy KSDMA camp references into the inactive admin review queue, once per source row."""
+    if admin.must_change_password:
+        raise HTTPException(status_code=403, detail="Change your temporary password before using the admin console.")
+    from app.chatbot.ref_models import RefCamp
+    from app.routers.help_requests import get_lac_mapping
+
+    canonical_districts = list(get_lac_mapping())
+
+    try:
+        camps = db.query(RefCamp).order_by(RefCamp.district, RefCamp.name).all()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="KSDMA camp reference data is unavailable. Import the KSDMA dataset first.") from exc
+
+    existing_keys = {value for (value,) in db.query(Shelter.source_key).filter(Shelter.source_key.isnot(None)).all()}
+    added = 0
+    skipped = {"missing_coordinates": 0, "invalid_location": 0, "district_or_lac_unmatched": 0}
+    for camp in camps:
+        source_key = _reference_camp_source_key(camp)
+        legacy_source_key = f"ksdma-camp:{camp.id}"
+        if source_key in existing_keys or legacy_source_key in existing_keys:
+            existing_keys.add(source_key)
+            continue
+        if camp.lat is None or camp.lng is None:
+            skipped["missing_coordinates"] += 1
+            continue
+        try:
+            latitude, longitude = float(camp.lat), float(camp.lng)
+            if not (math.isfinite(latitude) and math.isfinite(longitude) and 8 <= latitude <= 13 and 74 <= longitude <= 78):
+                skipped["invalid_location"] += 1
+                continue
+            district_name = next((name for name in canonical_districts if _district_key(name) == _district_key(camp.district)), None)
+            if not district_name:
+                skipped["district_or_lac_unmatched"] += 1
+                continue
+            nearest = _nearest_lac(district_name, latitude, longitude)
+            if not nearest:
+                skipped["district_or_lac_unmatched"] += 1
+                continue
+            district, lac = validate_district_and_lac(district_name, nearest[0])
+            _validate_shelter_coordinate(district, latitude, longitude)
+        except HTTPException as exc:
+            if exc.status_code != 422:
+                raise
+            skipped["invalid_location"] += 1
+            continue
+        except (TypeError, ValueError, IndexError):
+            skipped["invalid_location"] += 1
+            continue
+        address = ", ".join(part for part in (camp.village, camp.lsg, district) if part)[:500]
+        db.add(Shelter(
+            name=(camp.name or camp.village or camp.lsg or f"KSDMA relief camp {camp.id}")[:150],
+            building_type="Relief camp", district=district, lac=lac, address=address or district,
+            latitude=latitude, longitude=longitude, capacity=0, occupied=0,
+            is_active=0, source_key=source_key, source_name="KSDMA", source_row=camp.id,
+            needs_review=True, lac_assignment_method="nearest_center",
+            lac_distance_km=nearest[1], created_by_admin_id=admin.id,
+        ))
+        existing_keys.add(source_key)
+        added += 1
+    db.commit()
+    return {"imported": added, "already_in_directory": len(camps) - added - sum(skipped.values()),
+            "skipped": skipped, "total_reference_camps": len(camps),
+            "message": "Imported locations are inactive and require admin review before they can appear as requestable shelters."}
+
+
 @admin_router.post("/validate-location")
 def admin_validate_location(data: ShelterLocationCheck, admin: AdminUser = Depends(get_current_admin)):
     if admin.must_change_password:
@@ -301,6 +405,8 @@ def admin_update(shelter_id: int, data: ShelterCreate, db: Session = Depends(get
     shelter = db.get(Shelter, shelter_id)
     if not shelter:
         raise HTTPException(status_code=404, detail="Shelter not found.")
+    if shelter.needs_review and data.is_active:
+        raise HTTPException(status_code=409, detail="Complete the shelter review before making it available for citizen requests.")
     district, lac = validate_district_and_lac(data.district, data.lac)
     _validate_shelter_coordinate(district, data.latitude, data.longitude)
     if data.source_key and db.query(Shelter).filter(Shelter.source_key == data.source_key, Shelter.id != shelter.id).first():
@@ -337,6 +443,8 @@ def admin_review(shelter_id: int, db: Session = Depends(get_db), admin: AdminUse
     shelter = db.get(Shelter, shelter_id)
     if not shelter:
         raise HTTPException(status_code=404, detail="Shelter not found.")
+    if shelter.source_name == "KSDMA" and shelter.capacity < 1:
+        raise HTTPException(status_code=409, detail="Enter and save the current confirmed capacity before completing this camp's review.")
     shelter.needs_review = False
     db.commit()
     db.refresh(shelter)
@@ -378,12 +486,18 @@ def public_reference_camps(
     total = query.count()
     camps = (query.order_by(RefCamp.district, RefCamp.name)
              .offset((page - 1) * page_size).limit(page_size).all())
+    known_source_keys = {value for (value,) in db.query(Shelter.source_key).filter(Shelter.source_key.isnot(None)).all()}
     items = []
     for camp in camps:
+        source_key = _reference_camp_source_key(camp)
+        legacy_source_key = f"ksdma-camp:{camp.id}"
+        if source_key not in known_source_keys and legacy_source_key in known_source_keys:
+            source_key = legacy_source_key
         location_query = ", ".join(part for part in (camp.name, camp.village, camp.lsg, camp.district, "Kerala", "India") if part)
         map_query = f"{camp.lat},{camp.lng}" if camp.lat is not None and camp.lng is not None else location_query
         items.append({
             "id": camp.id,
+            "source_key": source_key,
             "name": camp.name,
             "district": camp.district,
             "local_body": camp.lsg,

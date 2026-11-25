@@ -444,10 +444,10 @@ export default function KeralaMap({
 
         </Pane>
         <Pane name="shelterMarkers" style={{ zIndex: 630, pointerEvents: "auto" }}>
-        {showShelters && shelters.filter(s => Number.isFinite(Number(s.latitude)) && Number.isFinite(Number(s.longitude))).map(shelter => (
+        {showShelters && shelters.filter(s => s.latitude != null && s.longitude != null && Number.isFinite(Number(s.latitude)) && Number.isFinite(Number(s.longitude))).map(shelter => (
           <Marker key={`shelter-${shelter.id}`} position={[Number(shelter.latitude), Number(shelter.longitude)]} pane="shelterMarkers" icon={shelterMapIcon} title={shelter.name}>
-            <Tooltip direction="top" offset={[0, -5]}>{shelter.name} · {shelter.available} spaces</Tooltip>
-            <Popup pane="citizenPopups"><div className="lac-marker-popup"><span className="popup-badge shelter-popup-badge">Emergency shelter</span><h4>{shelter.name}</h4><div className="popup-row"><span>Building</span><strong>{shelter.building_type}</strong></div><div className="popup-row"><span>Area</span><strong>{shelter.lac}, {shelter.district}</strong></div><div className="popup-row"><span>Address</span><strong>{shelter.address}</strong></div><div className="popup-row"><span>Capacity</span><strong>{shelter.occupied}/{shelter.capacity}</strong></div></div></Popup>
+            <Tooltip direction="top" offset={[0, -5]}>{shelter.name} · {shelter.needs_review ? "awaiting verification" : `${shelter.available} spaces`}</Tooltip>
+            <Popup pane="citizenPopups"><div className="lac-marker-popup"><span className="popup-badge shelter-popup-badge">{shelter.needs_review ? "Location awaiting verification" : shelter.source_name === "KSDMA" ? "Verified KSDMA shelter" : "Emergency shelter"}</span><h4>{shelter.name}</h4><div className="popup-row"><span>Building</span><strong>{shelter.building_type}</strong></div><div className="popup-row"><span>Area</span><strong>{shelter.lac}, {shelter.district}</strong></div><div className="popup-row"><span>Address</span><strong>{shelter.address}</strong></div><div className="popup-row"><span>{shelter.needs_review ? "Availability" : "Capacity"}</span><strong>{shelter.needs_review ? "Not available for requests yet" : `${shelter.occupied}/${shelter.capacity}`}</strong></div></div></Popup>
           </Marker>
         ))}
         </Pane>

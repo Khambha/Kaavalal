@@ -84,7 +84,7 @@ export default function ShelterRequests({ shelters = [], language = "en" }) {
       .filter(s => directoryCategory !== "available" || (s.is_active && s.available > 0))
       .map(s => ({ ...s, rowType: "managed", rowKey: `shelter-${s.id}` })),
     ...(referenceCamps.items || [])
-      .filter(camp => !managedCampKeys.has(`ksdma-camp:${camp.id}`))
+      .filter(camp => !managedCampKeys.has(camp.source_key || `ksdma-camp:${camp.id}`))
       .filter(camp => !districtFilter || camp.district === districtFilter)
       .filter(camp => directoryCategory !== "available")
       .map(camp => ({

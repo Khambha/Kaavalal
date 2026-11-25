@@ -1,7 +1,7 @@
 """Reference tables loaded from KSDMA datasets (see import_ksdma.py).
 
-These are owned by the chatbot module, so they never clash with your Shelter Management /
-Resource Inventory tables. Later you can merge them into those modules if you wish.
+These remain source/reference records for the chatbot. Relief camps can be copied into the
+managed shelter directory through an admin review step; source rows stay available here.
 No personal data is stored here (no owner names, phone numbers of individuals, addresses).
 """
 from sqlalchemy import Column, Integer, String, Float, Text, Index
